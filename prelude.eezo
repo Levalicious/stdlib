@@ -1,0 +1,16 @@
+# Eezo Prelude - Runtime primitives required by parser
+
+# Unit value
+Unit(f) := f
+
+# Fold for IO (right fold over output)
+fold(f)(z)(l) := l(z)(f)
+
+# IO primitives (stubs - actual IO handled externally)
+put(c)(k) := k
+get(n)(ops) := ops
+
+# Y combinator (fixed-point combinator for recursion)
+# Y = λf.(λx.f(x x))(λx.f(x x))
+# In eezo syntax with explicit application:
+fix(f) := (x -> f(x(x)))(x -> f(x(x)))

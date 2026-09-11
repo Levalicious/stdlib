@@ -1,0 +1,23 @@
+# Eezo Maybe (Option type)
+# Church-encoded optional values
+
+#import bool
+
+# Constructors
+nothing(n)(j) := n
+just(x)(n)(j) := j(x)
+
+# Eliminator
+maybe(default)(f)(m) := m(default)(f)
+
+# Functor
+mapMaybe(f)(m) := m(nothing)(x -> just(f(x)))
+
+# Monad operations
+bindMaybe(m)(f) := m(nothing)(f)
+returnMaybe(x) := just(x)
+
+# Utilities
+isNothing(m) := m(true)(x -> false)
+isJust(m) := m(false)(x -> true)
+fromMaybe(default)(m) := m(default)(x -> x)

@@ -1,0 +1,30 @@
+# Eezo Either (Sum type)
+# Church-encoded disjoint union
+
+#import bool
+
+# Constructors
+left(x)(l)(r) := l(x)
+right(x)(l)(r) := r(x)
+
+# Eliminator
+either(fl)(fr)(e) := e(fl)(fr)
+
+# Functor (maps over right)
+mapEither(f)(e) := e(left)(x -> right(f(x)))
+
+# Bifunctor
+bimapEither(fl)(fr)(e) := e(x -> left(fl(x)))(x -> right(fr(x)))
+
+# Monad operations (right-biased)
+bindEither(e)(f) := e(left)(f)
+returnEither(x) := right(x)
+
+# Utilities
+isLeft(e) := e(x -> true)(x -> false)
+isRight(e) := e(x -> false)(x -> true)
+fromLeft(default)(e) := e(x -> x)(x -> default)
+fromRight(default)(e) := e(x -> default)(x -> x)
+
+# Flip sides
+swap(e) := e(right)(left)

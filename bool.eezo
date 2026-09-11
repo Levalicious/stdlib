@@ -1,0 +1,15 @@
+# Eezo Booleans
+# Church-encoded booleans
+
+# Boolean values
+true(t)(f) := t
+false(t)(f) := f
+
+# Logical operations
+not(b) := b(false)(true)
+and(a)(b) := a(b)(false)
+or(a)(b) := a(true)(b)
+xor(a)(b) := a(not(b))(b)
+
+# If-then-else (same as applying boolean)
+if(c)(t)(f) := c(t)(f)

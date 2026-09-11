@@ -1,0 +1,25 @@
+# Eezo Pairs (Products)
+# Church-encoded pairs
+
+# Pair constructor
+pair(x)(y)(f) := f(x)(y)
+
+# Projections
+fst(p) := p(x -> y -> x)
+snd(p) := p(x -> y -> y)
+
+# Swap components
+swap(p) := pair(snd(p))(fst(p))
+
+# Map over both components
+bimap(f)(g)(p) := pair(f(fst(p)))(g(snd(p)))
+
+# Map over first component
+first(f)(p) := pair(f(fst(p)))(snd(p))
+
+# Map over second component
+second(g)(p) := pair(fst(p))(g(snd(p)))
+
+# Curry and uncurry
+curry(f)(x)(y) := f(pair(x)(y))
+uncurry(f)(p) := f(fst(p))(snd(p))

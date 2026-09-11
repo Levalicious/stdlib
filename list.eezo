@@ -1,0 +1,33 @@
+# Eezo Lists
+# Church-encoded (right-fold) lists
+
+#import bool
+#import maybe
+#import nat
+
+# Constructors
+nil(n)(c) := n
+cons(x)(xs)(n)(c) := c(x)(xs(n)(c))
+
+# Basic operations
+head(l) := l(nothing)(x -> xs -> just(x))
+tail(l)(n)(c) := l(n)(x -> xs -> xss -> xs(c(x)))(x -> n)
+null(l) := l(true)(x -> xs -> false)
+
+# Fold
+foldr(f)(z)(l) := l(z)(f)
+
+# Map
+map(f)(l) := l(nil)(x -> xs -> cons(f(x))(xs))
+
+# Append
+append(l1)(l2) := l1(l2)(cons)
+
+# Length
+length(l) := l(zero)(x -> n -> succ(n))
+
+# Reverse (using foldl via fix)
+reverse(l) := l(nil)(x -> acc -> cons(x)(acc))
+
+# Alias for parser compatibility
+fold(f)(z)(l) := l(z)(f)

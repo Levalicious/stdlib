@@ -1,0 +1,33 @@
+# Eezo I/O - the Lazy-K / WHNF stream model
+#
+# A program is a function from the input stream to the output stream.
+# A stream is a pair  f -> f(x)(rest)  whose elements are Church-numeral
+# bytes. The input ends in an infinite stream of 256 (EOF); an output
+# element of 256 or more ends the program with exit status n - 256.
+#
+# The driver (eezo -i, or an ELF built with eezoc -e -i) forces the output
+# to weak head normal form one element at a time: nothing is ever
+# normalised beyond what the next byte needs, so infinite streams are fine
+# and the whole model - including I/O - is pure.
+
+#import prelude
+#import pair
+#import nat
+
+# Streams
+cons(x)(rest) := pair(x)(rest)
+head(s) := fst(s)
+tail(s) := snd(s)
+
+# End of stream: 256 followed by anything (the tail is never demanded)
+eof := 256
+stop := cons(eof)(zero)
+
+# End with an exit status
+exit(code) := cons(add(eof)(code))(zero)
+
+# Map over a stream (lazy: builds one cell per demanded element)
+smap(f)(s) := fix(go -> t -> cons(f(head(t)))(go(tail(t))))(s)
+
+# Copy input to output
+cat(s) := s

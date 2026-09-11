@@ -1,0 +1,5 @@
+# Test program for natural number operations
+#import nat
+
+# 2^3 = 8
+pow(two)(three)

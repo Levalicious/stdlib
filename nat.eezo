@@ -1,0 +1,28 @@
+# Eezo Natural Numbers
+# Church-encoded naturals
+
+#import pair
+#import bool
+
+# Zero and successor
+zero(f)(x) := x
+succ(n)(f)(x) := f(n(f)(x))
+
+# Common numbers
+one := succ(zero)
+two := succ(one)
+three := succ(two)
+
+# Arithmetic
+add(m)(n)(f)(x) := m(f)(n(f)(x))
+mul(m)(n)(f) := m(n(f))
+pow(m)(n) := n(m)
+
+# Predecessor (tricky with Church numerals)
+pred(n) := fst(n(p -> pair(snd(p))(succ(snd(p))))(pair(zero)(zero)))
+
+# Subtraction (monus - bottoms out at zero)
+sub(m)(n) := n(pred)(m)
+
+# Comparison
+isZero(n) := n(x -> false)(true)
