@@ -1,0 +1,111 @@
+#import prelude
+-- nat.tt: the naturals as a commutative semiring, their decidable order, and division with remainder (M16b).
+-- Equalities are paths. The prelude's add, mul, sub, div, mod, ble are native on literals and unfold by their
+-- bodies on open terms: add and mul recurse on the first argument, ble on both, div and mod are one iteration.
+
+-- addition
+def add_zero_r : (n : Nat) -> Path Nat (add n zero) n :=
+  \n -> elim Nat (\n -> Path Nat (add n zero) n) (prefl Nat zero) (\k ih -> cong Nat Nat suc (add k zero) k ih) n
+def add_suc_r : (m n : Nat) -> Path Nat (add m (suc n)) (suc (add m n)) :=
+  \m n -> elim Nat (\m -> Path Nat (add m (suc n)) (suc (add m n))) (prefl Nat (suc n))
+            (\k ih -> cong Nat Nat suc (add k (suc n)) (suc (add k n)) ih) m
+def add_comm : (m n : Nat) -> Path Nat (add m n) (add n m) :=
+  \m n -> elim Nat (\m -> Path Nat (add m n) (add n m)) (sym Nat (add n zero) n (add_zero_r n))
+            (\k ih -> compPath Nat (suc (add k n)) (suc (add n k)) (add n (suc k))
+                        (cong Nat Nat suc (add k n) (add n k) ih)
+                        (sym Nat (add n (suc k)) (suc (add n k)) (add_suc_r n k))) m
+def add_assoc : (a b c : Nat) -> Path Nat (add (add a b) c) (add a (add b c)) :=
+  \a b c -> elim Nat (\a -> Path Nat (add (add a b) c) (add a (add b c))) (prefl Nat (add b c))
+              (\k ih -> cong Nat Nat suc (add (add k b) c) (add k (add b c)) ih) a
+def add_swap : (a b c : Nat) -> Path Nat (add a (add b c)) (add b (add a c)) :=
+  \a b c -> compPath Nat (add a (add b c)) (add (add a b) c) (add b (add a c))
+              (sym Nat (add (add a b) c) (add a (add b c)) (add_assoc a b c))
+              (compPath Nat (add (add a b) c) (add (add b a) c) (add b (add a c))
+                 (cong Nat Nat (\x -> add x c) (add a b) (add b a) (add_comm a b))
+                 (add_assoc b a c))
+
+-- multiplication
+def mul_zero_r : (n : Nat) -> Path Nat (mul n zero) zero :=
+  \n -> elim Nat (\n -> Path Nat (mul n zero) zero) (prefl Nat zero) (\k ih -> ih) n
+def mul_suc_r : (m n : Nat) -> Path Nat (mul m (suc n)) (add m (mul m n)) :=
+  \m n -> elim Nat (\m -> Path Nat (mul m (suc n)) (add m (mul m n))) (prefl Nat zero)
+            (\k ih -> cong Nat Nat suc (add n (mul k (suc n))) (add k (add n (mul k n)))
+                        (compPath Nat (add n (mul k (suc n))) (add n (add k (mul k n))) (add k (add n (mul k n)))
+                           (cong Nat Nat (\x -> add n x) (mul k (suc n)) (add k (mul k n)) ih)
+                           (add_swap n k (mul k n)))) m
+def mul_one_r : (n : Nat) -> Path Nat (mul n 1) n :=
+  \n -> compPath Nat (mul n 1) (add n (mul n zero)) n (mul_suc_r n zero)
+          (compPath Nat (add n (mul n zero)) (add n zero) n
+             (cong Nat Nat (\x -> add n x) (mul n zero) zero (mul_zero_r n)) (add_zero_r n))
+def mul_dist_r : (a b c : Nat) -> Path Nat (mul (add a b) c) (add (mul a c) (mul b c)) :=
+  \a b c -> elim Nat (\a -> Path Nat (mul (add a b) c) (add (mul a c) (mul b c))) (prefl Nat (mul b c))
+              (\k ih -> compPath Nat (add c (mul (add k b) c)) (add c (add (mul k c) (mul b c))) (add (add c (mul k c)) (mul b c))
+                          (cong Nat Nat (\x -> add c x) (mul (add k b) c) (add (mul k c) (mul b c)) ih)
+                          (sym Nat (add (add c (mul k c)) (mul b c)) (add c (add (mul k c) (mul b c))) (add_assoc c (mul k c) (mul b c)))) a
+def mul_assoc : (a b c : Nat) -> Path Nat (mul (mul a b) c) (mul a (mul b c)) :=
+  \a b c -> elim Nat (\a -> Path Nat (mul (mul a b) c) (mul a (mul b c))) (prefl Nat zero)
+              (\k ih -> compPath Nat (mul (add b (mul k b)) c) (add (mul b c) (mul (mul k b) c)) (add (mul b c) (mul k (mul b c)))
+                          (mul_dist_r b (mul k b) c)
+                          (cong Nat Nat (\x -> add (mul b c) x) (mul (mul k b) c) (mul k (mul b c)) ih)) a
+def mul_comm : (m n : Nat) -> Path Nat (mul m n) (mul n m) :=
+  \m n -> elim Nat (\m -> Path Nat (mul m n) (mul n m)) (sym Nat (mul n zero) zero (mul_zero_r n))
+            (\k ih -> compPath Nat (add n (mul k n)) (add n (mul n k)) (mul n (suc k))
+                        (cong Nat Nat (\x -> add n x) (mul k n) (mul n k) ih)
+                        (sym Nat (mul n (suc k)) (add n (mul n k)) (mul_suc_r n k))) m
+def mul_dist_l : (a b c : Nat) -> Path Nat (mul a (add b c)) (add (mul a b) (mul a c)) :=
+  \a b c -> compPath Nat (mul a (add b c)) (mul (add b c) a) (add (mul a b) (mul a c)) (mul_comm a (add b c))
+              (compPath Nat (mul (add b c) a) (add (mul b a) (mul c a)) (add (mul a b) (mul a c)) (mul_dist_r b c a)
+                 (compPath Nat (add (mul b a) (mul c a)) (add (mul a b) (mul c a)) (add (mul a b) (mul a c))
+                    (cong Nat Nat (\x -> add x (mul c a)) (mul b a) (mul a b) (mul_comm b a))
+                    (cong Nat Nat (\x -> add (mul a b) x) (mul c a) (mul a c) (mul_comm c a))))
+
+-- the decidable order: ble r m = 1 and ble (suc r) m = 0 force r = m (the only fact the remainder's bound needs)
+def idToPath {A : U} {a b : A} (p : Id A a b) : Path A a b := substId (\y -> Path A a y) p (prefl A a)
+def pathToId {A : U} {a b : A} (p : Path A a b) : Id A a b := transp (\i -> Id A a (p i)) i0 refl
+def zeroNotOne : Id Nat 0 1 -> Empty := \e -> znots (idToPath e)
+def le_lt_eq : (r m : Nat) -> Id Nat (ble r m) 1 -> Id Nat (ble (suc r) m) 0 -> Path Nat r m :=
+  \r -> elim Nat (\r -> (m : Nat) -> Id Nat (ble r m) 1 -> Id Nat (ble (suc r) m) 0 -> Path Nat r m)
+          (\m -> elim Nat (\m -> Id Nat (ble 0 m) 1 -> Id Nat (ble 1 m) 0 -> Path Nat 0 m)
+                   (\_ _ -> prefl Nat 0)
+                   (\m' _ _ e -> elim Empty (\_ -> Path Nat 0 (suc m')) (zeroNotOne (substId (\y -> Id Nat y 1) e refl)))
+                   m)
+          (\r' ih m -> elim Nat (\m -> Id Nat (ble (suc r') m) 1 -> Id Nat (ble (suc (suc r')) m) 0 -> Path Nat (suc r') m)
+                         (\e _ -> elim Empty (\_ -> Path Nat (suc r') 0) (zeroNotOne e))
+                         (\m' _ e1 e2 -> cong Nat Nat suc r' m' (ih m' e1 e2))
+                         m)
+          r
+
+-- division with remainder: after x steps from (0, 0) the state (q, r) satisfies x = q*m + r and r < m (m = suc m')
+def dm_q : Nat -> Nat -> Nat := \m x -> fst (dmiter m x)
+def dm_r : Nat -> Nat -> Nat := \m x -> snd (dmiter m x)
+def DmInv : (m x : Nat) -> Sigma Nat (\_ -> Nat) -> U :=
+  \m x p -> Sigma (Path Nat (add (mul (fst p) m) (snd p)) x) (\_ -> Id Nat (blt (snd p) m) 1)
+def ble_ones : (a b k : Nat) -> Id Nat (ble a b) (suc k) -> Id Nat (ble a b) 1 :=
+  \a -> elim Nat (\a -> (b k : Nat) -> Id Nat (ble a b) (suc k) -> Id Nat (ble a b) 1)
+          (\b k _ -> refl)
+          (\a' ih b -> elim Nat (\b -> (k : Nat) -> Id Nat (ble (suc a') b) (suc k) -> Id Nat (ble (suc a') b) 1)
+                         (\k e -> elim Empty (\_ -> Id Nat 0 1) (znots (idToPath e)))
+                         (\b' _ k e -> ih b' k e)
+                         b)
+          a
+def blt_ones : (a b k : Nat) -> Id Nat (blt a b) (suc k) -> Id Nat (blt a b) 1 := \a b k e -> ble_ones (suc a) b k e
+def dm_step_inv : (m' x : Nat) (p : Sigma Nat (\_ -> Nat)) -> DmInv (suc m') x p -> DmInv (suc m') (suc x) (dmstep (suc m') p) :=
+  \m' x p inv -> elim Nat (\c -> Id Nat c (blt (suc (snd p)) (suc m')) -> DmInv (suc m') (suc x) (ifN c (fst p, suc (snd p)) (suc (fst p), 0)))
+     (\e -> ( compPath Nat (add (mul (suc (fst p)) (suc m')) 0) (add (suc m') (mul (fst p) (suc m'))) (suc x)
+                (add_zero_r (add (suc m') (mul (fst p) (suc m'))))
+                (compPath Nat (suc (add m' (mul (fst p) (suc m')))) (suc (add (mul (fst p) (suc m')) m')) (suc x)
+                   (cong Nat Nat suc (add m' (mul (fst p) (suc m'))) (add (mul (fst p) (suc m')) m') (add_comm m' (mul (fst p) (suc m'))))
+                   (cong Nat Nat suc (add (mul (fst p) (suc m')) m') x
+                      (compPath Nat (add (mul (fst p) (suc m')) m') (add (mul (fst p) (suc m')) (snd p)) x
+                         (cong Nat Nat (\y -> add (mul (fst p) (suc m')) y) m' (snd p) (sym Nat (snd p) m' (le_lt_eq (snd p) m' (snd inv) (symId e))))
+                         (fst inv))))
+            , refl ))
+     (\c' _ e -> ( compPath Nat (add (mul (fst p) (suc m')) (suc (snd p))) (suc (add (mul (fst p) (suc m')) (snd p))) (suc x)
+                     (add_suc_r (mul (fst p) (suc m')) (snd p))
+                     (cong Nat Nat suc (add (mul (fst p) (suc m')) (snd p)) x (fst inv))
+                 , blt_ones (suc (snd p)) (suc m') c' (symId e) ))
+     (blt (suc (snd p)) (suc m')) refl
+def dm_inv : (m' x : Nat) -> DmInv (suc m') x (dmiter (suc m') x) :=
+  \m' x -> elim Nat (\x -> DmInv (suc m') x (dmiter (suc m') x)) (prefl Nat 0, refl) (\k ih -> dm_step_inv m' k (dmiter (suc m') k) ih) x
+def modLtS : (x m' : Nat) -> Lt (mod x (suc m')) (suc m') := \x m' -> snd (dm_inv m' x)
+def divmod_spec : (x m' : Nat) -> Path Nat (add (mul (div x (suc m')) (suc m')) (mod x (suc m'))) x := \x m' -> fst (dm_inv m' x)

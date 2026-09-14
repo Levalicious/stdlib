@@ -1,0 +1,18 @@
+#import nat
+-- word.tt: machine words in the theory (M16a). The word type is the naturals below 2^64 with that bound irrelevant; the
+-- operations are specified by the naturals' arithmetic (mkw reduces modulo 2^64, bounded by nat.tt's modLtS) and erased to
+-- the run-time primitives of the same names.
+def M64 : Nat := 18446744073709551616
+def M63 : Nat := 18446744073709551615
+word Word : U := Sigma Nat .(\k -> Lt k M64)
+def mkw : Nat -> Word := \y -> (mod y M64, modLtS y M63)
+def n2b : Nat -> Bool := \n -> elim Nat (\_ -> Bool) false (\_ _ -> true) n
+word wadd : Word -> Word -> Word := \a b -> mkw (add (fst a) (fst b))
+word wsub : Word -> Word -> Word := \a b -> mkw (add (fst a) (sub M64 (fst b)))
+word wmul : Word -> Word -> Word := \a b -> mkw (mul (fst a) (fst b))
+word weq : Word -> Word -> Bool := \a b -> n2b (beq (fst a) (fst b))
+word wlt : Word -> Word -> Bool := \a b -> n2b (blt (fst a) (fst b))
+word waddc : Word -> Word -> Sigma Word (\_ -> Word) := \a b -> (mkw (add (fst a) (fst b)), mkw (div (add (fst a) (fst b)) M64))
+word wsubb : Word -> Word -> Sigma Word (\_ -> Word) := \a b -> (mkw (add (fst a) (sub M64 (fst b))), mkw (blt (fst a) (fst b)))
+word wmull : Word -> Word -> Sigma Word (\_ -> Word) := \a b -> (mkw (mul (fst a) (fst b)), mkw (div (mul (fst a) (fst b)) M64))
+word wdivmod : Word -> Word -> Sigma Word (\_ -> Word) := \a b -> (mkw (div (fst a) (fst b)), mkw (mod (fst a) (fst b)))
