@@ -362,3 +362,29 @@ def lt_add_two_le : (a b d : Nat) -> Le (suc a) d -> Le (suc b) d -> Le (suc (ad
                (compPath Nat (add d (suc (add b (fst q)))) (add d d) (mul 2 d)
                   (cong Nat Nat (\w -> add d w) (add (suc b) (fst q)) d (snd q))
                   (sym Nat (mul 2 d) (add d d) (mul_two d)))))))
+
+-- The quotient bound the word layer's carry needs. It cannot come from a case split on the quotient
+-- itself: eliminating on div x m throws away the relation to x, and it is precisely that relation the
+-- refuted branch needs. So it comes from dm_inv's invariant, the way modLtS does - split on the
+-- quotient only once the relation is already in hand.
+def dm_q_mul_le : (m' x : Nat) -> Le (mul (dm_q (suc m') x) (suc m')) x :=
+  \m' x -> (mod x (suc m'), divmod_spec x m')
+-- a number that cannot be two or more is at most one (the split is safe here: the refutation is a hypothesis)
+def le_one_of_not_le_two : (q : Nat) -> (Le 2 q -> Empty) -> Le q 1 :=
+  \q -> elim Nat (\q -> (Le 2 q -> Empty) -> Le q 1)
+    (\_ -> (1, prefl Nat 1))
+    (\k ih -> elim Nat (\k' -> (Le 2 (suc k') -> Empty) -> Le (suc k') 1)
+       (\h -> (0, prefl Nat 1))
+       (\j ih2 h -> elim Empty (\_ -> Le (suc (suc j)) 1) (h (j, prefl Nat (suc (suc j)))))
+       k)
+    q
+-- the quotient of a below-2m number is at most one: the quotient cannot reach two, because q >= 2 would put
+-- 2m <= q*m <= x, contradicting x < 2m
+def dm_q_le_one : (m' x : Nat) -> Le (suc x) (mul 2 (suc m')) -> Le (dm_q (suc m') x) 1 :=
+  \m' x h -> le_one_of_not_le_two (dm_q (suc m') x)
+    (\h2 -> lt_self_absurd x
+       (le_trans (suc x) (mul 2 (suc m')) x
+          h
+          (le_trans (mul 2 (suc m')) (mul (dm_q (suc m') x) (suc m')) x
+             (le_mul_r 2 (dm_q (suc m') x) (suc m') h2)
+             (dm_q_mul_le m' x))))
