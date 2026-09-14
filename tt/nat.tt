@@ -316,3 +316,22 @@ def sub_add_le : (m n : Nat) -> Le n m -> Path Nat (add (sub m n) n) m :=
           (cong Nat Nat (\w -> add w n) (sub (add n (fst p)) n) (fst p) (sub_add_d n (fst p)))
           (add_comm (fst p) n)))
     (snd p)
+
+-- ---- the order lemmas the Word layer's carry bounds need (M16b b5) ----
+-- a successor on the left is absorbed by the witness: Le (suc a) b gives Le a b
+def le_of_le_suc : (a b : Nat) -> Le (suc a) b -> Le a b :=
+  \a b p -> (suc (fst p), compPath Nat (add a (suc (fst p))) (add (suc a) (fst p)) b
+     (add_suc_r a (fst p))
+     (snd p))
+-- and for multiplication on the right: Le a b gives Le (mul a c) (mul b c)
+def le_mul_r : (a b c : Nat) -> Le a b -> Le (mul a c) (mul b c) :=
+  \a b c p -> (mul (fst p) c,
+    compPath Nat (add (mul a c) (mul (fst p) c)) (mul (add a (fst p)) c) (mul b c)
+      (sym Nat (mul (add a (fst p)) c) (add (mul a c) (mul (fst p) c)) (mul_dist_r a (fst p) c))
+      (cong Nat Nat (\w -> mul w c) (add a (fst p)) b (snd p)))
+-- no number is below itself
+def lt_self_absurd : (x : Nat) -> Le (suc x) x -> Empty :=
+  \x -> elim Nat (\x -> Le (suc x) x -> Empty)
+    (\p -> snotz (snd p))
+    (\k ih p -> ih (fst p, injSuc (snd p)))
+    x
