@@ -1,0 +1,71 @@
+#import nat
+-- algebra.tt: algebraic structures on a carrier, as nested Sigma types with path laws (M16b). Accessors give the
+-- components names; the instances on the naturals come from nat.tt. Ring theory grows here (RNS: M17).
+
+-- monoids
+def Monoid (A : U) : U :=
+  Sigma (A -> A -> A) (\op -> Sigma A (\e ->
+    Sigma ((x y z : A) -> Path A (op (op x y) z) (op x (op y z))) (\_ ->
+    Sigma ((x : A) -> Path A (op e x) x) (\_ -> (x : A) -> Path A (op x e) x))))
+def mop {A : U} (m : Monoid A) : A -> A -> A := fst m
+def munit {A : U} (m : Monoid A) : A := fst (snd m)
+def massoc {A : U} (m : Monoid A) : (x y z : A) -> Path A (mop m (mop m x y) z) (mop m x (mop m y z)) := fst (snd (snd m))
+def munit_l {A : U} (m : Monoid A) : (x : A) -> Path A (mop m (munit m) x) x := fst (snd (snd (snd m)))
+def munit_r {A : U} (m : Monoid A) : (x : A) -> Path A (mop m x (munit m)) x := snd (snd (snd (snd m)))
+def CommMonoid (A : U) : U := Sigma (Monoid A) (\m -> (x y : A) -> Path A (mop m x y) (mop m y x))
+def cmon {A : U} (c : CommMonoid A) : Monoid A := fst c
+def mcomm {A : U} (c : CommMonoid A) : (x y : A) -> Path A (mop (cmon c) x y) (mop (cmon c) y x) := snd c
+
+-- groups: a monoid with left inverses
+def Group (A : U) : U := Sigma (Monoid A) (\m -> Sigma (A -> A) (\inv -> (x : A) -> Path A (mop m (inv x) x) (munit m)))
+def gmon {A : U} (g : Group A) : Monoid A := fst g
+def ginv {A : U} (g : Group A) : A -> A := fst (snd g)
+def ginv_l {A : U} (g : Group A) : (x : A) -> Path A (mop (gmon g) (ginv g x) x) (munit (gmon g)) := snd (snd g)
+def AbGroup (A : U) : U := Sigma (Group A) (\g -> (x y : A) -> Path A (mop (gmon g) x y) (mop (gmon g) y x))
+def abg {A : U} (a : AbGroup A) : Group A := fst a
+
+-- semirings and rings: an additive commutative monoid / abelian group and a multiplicative monoid, distributing
+def Semiring (A : U) : U :=
+  Sigma (CommMonoid A) (\add -> Sigma (Monoid A) (\mul ->
+    Sigma ((x y z : A) -> Path A (mop mul x (mop (cmon add) y z)) (mop (cmon add) (mop mul x y) (mop mul x z))) (\_ ->
+    Sigma ((x y z : A) -> Path A (mop mul (mop (cmon add) x y) z) (mop (cmon add) (mop mul x z) (mop mul y z))) (\_ ->
+    Sigma ((x : A) -> Path A (mop mul (munit (cmon add)) x) (munit (cmon add))) (\_ ->
+           (x : A) -> Path A (mop mul x (munit (cmon add))) (munit (cmon add)))))))
+def Ring (A : U) : U :=
+  Sigma (AbGroup A) (\add -> Sigma (Monoid A) (\mul ->
+    Sigma ((x y z : A) -> Path A (mop mul x (mop (gmon (abg add)) y z)) (mop (gmon (abg add)) (mop mul x y) (mop mul x z))) (\_ ->
+           (x y z : A) -> Path A (mop mul (mop (gmon (abg add)) x y) z) (mop (gmon (abg add)) (mop mul x z) (mop mul y z)))))
+def CommRing (A : U) : U := Sigma (Ring A) (\r -> (x y : A) -> Path A (mop (fst (snd r)) x y) (mop (fst (snd r)) y x))
+def Field (A : U) : U :=
+  Sigma (CommRing A) (\r -> Sigma (A -> A) (\inv ->
+    (x : A) -> (Path A x (munit (gmon (abg (fst (fst r))))) -> Empty) -> Path A (mop (fst (snd (fst r))) (inv x) x) (munit (fst (snd (fst r))))))
+
+-- the naturals
+def natAddMonoid : Monoid Nat := (add, (0, (add_assoc, ((\x -> prefl Nat x), add_zero_r))))
+def natAddCommMonoid : CommMonoid Nat := (natAddMonoid, add_comm)
+def mul_one_l : (n : Nat) -> Path Nat (mul 1 n) n := \n -> add_zero_r n
+def natMulMonoid : Monoid Nat := (mul, (1, (mul_assoc, (mul_one_l, mul_one_r))))
+def natSemiring : Semiring Nat := (natAddCommMonoid, (natMulMonoid, (mul_dist_l, (mul_dist_r, ((\x -> prefl Nat 0), mul_zero_r)))))
+
+-- derived, in any group: the left inverse is a right inverse, and the unit is unique
+def ginv_r {A : U} (g : Group A) : (x : A) -> Path A (mop (gmon g) x (ginv g x)) (munit (gmon g)) :=
+  \x -> let m : Monoid A := gmon g in
+        let i : A -> A := ginv g in
+        let e : A := munit m in
+        -- x i(x) = e x i(x) = (i(i(x)) i(x)) x i(x) = i(i(x)) (i(x) x) i(x) = i(i(x)) e i(x) = i(i(x)) i(x) = e
+        compPath A (mop m x (i x)) (mop m e (mop m x (i x))) e
+          (sym A (mop m e (mop m x (i x))) (mop m x (i x)) (munit_l m (mop m x (i x))))
+          (compPath A (mop m e (mop m x (i x))) (mop m (mop m (i (i x)) (i x)) (mop m x (i x))) e
+             (cong A A (\y -> mop m y (mop m x (i x))) e (mop m (i (i x)) (i x)) (sym A (mop m (i (i x)) (i x)) e (ginv_l g (i x))))
+             (compPath A (mop m (mop m (i (i x)) (i x)) (mop m x (i x))) (mop m (i (i x)) (mop m (i x) (mop m x (i x)))) e
+                (massoc m (i (i x)) (i x) (mop m x (i x)))
+                (compPath A (mop m (i (i x)) (mop m (i x) (mop m x (i x)))) (mop m (i (i x)) (mop m (mop m (i x) x) (i x))) e
+                   (cong A A (\y -> mop m (i (i x)) y) (mop m (i x) (mop m x (i x))) (mop m (mop m (i x) x) (i x))
+                      (sym A (mop m (mop m (i x) x) (i x)) (mop m (i x) (mop m x (i x))) (massoc m (i x) x (i x))))
+                   (compPath A (mop m (i (i x)) (mop m (mop m (i x) x) (i x))) (mop m (i (i x)) (mop m e (i x))) e
+                      (cong A A (\y -> mop m (i (i x)) (mop m y (i x))) (mop m (i x) x) e (ginv_l g x))
+                      (compPath A (mop m (i (i x)) (mop m e (i x))) (mop m (i (i x)) (i x)) e
+                         (cong A A (\y -> mop m (i (i x)) y) (mop m e (i x)) (i x) (munit_l m (i x)))
+                         (ginv_l g (i x)))))))
+def unit_unique {A : U} (m : Monoid A) (e' : A) (h : (x : A) -> Path A (mop m e' x) x) : Path A e' (munit m) :=
+  compPath A e' (mop m e' (munit m)) (munit m) (sym A (mop m e' (munit m)) e' (munit_r m e')) (h (munit m))
