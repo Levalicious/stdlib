@@ -6,6 +6,7 @@
 -- addition
 def add_zero_r : (n : Nat) -> Path Nat (add n zero) n :=
   \n -> elim Nat (\n -> Path Nat (add n zero) n) (prefl Nat zero) (\k ih -> cong Nat Nat suc (add k zero) k ih) n
+def add_zero_l : (n : Nat) -> Path Nat (add zero n) n := \n -> prefl Nat n
 def add_suc_r : (m n : Nat) -> Path Nat (add m (suc n)) (suc (add m n)) :=
   \m n -> elim Nat (\m -> Path Nat (add m (suc n)) (suc (add m n))) (prefl Nat (suc n))
             (\k ih -> cong Nat Nat suc (add k (suc n)) (suc (add k n)) ih) m
@@ -210,3 +211,88 @@ def dm_unique : (m' q r x : Nat) -> Path Nat (add (mul q (suc m')) r) x -> .(h :
   \m' q r x e h -> dm_eq m' q (div x (suc m')) r (mod x (suc m')) (compPath Nat (add (mul q (suc m')) r) x (add (mul (div x (suc m')) (suc m')) (mod x (suc m'))) e (sym Nat (add (mul (div x (suc m')) (suc m')) (mod x (suc m'))) x (divmod_spec x m'))) h (modLtS x m')
 def mod_small : (m' x : Nat) -> .(h : Lt x (suc m')) -> Path Nat (mod x (suc m')) x := \m' x h -> sym Nat x (mod x (suc m')) (snd (dm_unique m' 0 x x (prefl Nat x) h))
 def div_small : (m' x : Nat) -> .(h : Lt x (suc m')) -> Path Nat (div x (suc m')) 0 := \m' x h -> sym Nat 0 (div x (suc m')) (fst (dm_unique m' 0 x x (prefl Nat x) h))
+
+-- ---- modular arithmetic: the lemmas the Word laws rest on (x = q*m + r) ----
+def mod_mod : (x m' : Nat) -> Path Nat (mod (mod x (suc m')) (suc m')) (mod x (suc m')) :=
+  \x m' -> mod_small m' (mod x (suc m')) (modLtS x m')
+def mod_mul_add : (k r m' : Nat) -> Path Nat (mod (add (mul k (suc m')) r) (suc m')) (mod r (suc m')) :=
+  \k r m' -> sym Nat (mod r (suc m')) (mod (add (mul k (suc m')) r) (suc m'))
+    (snd (dm_unique m' (add k (div r (suc m'))) (mod r (suc m')) (add (mul k (suc m')) r)
+      (let dz : Nat := div r (suc m') in
+       let rz : Nat := mod r (suc m') in
+       compPath Nat
+         (add (mul (add k dz) (suc m')) rz)
+         (add (add (mul k (suc m')) (mul dz (suc m'))) rz)
+         (add (mul k (suc m')) r)
+         (cong Nat Nat (\w -> add w rz) (mul (add k dz) (suc m')) (add (mul k (suc m')) (mul dz (suc m'))) (mul_dist_r k dz (suc m')))
+         (compPath Nat
+            (add (add (mul k (suc m')) (mul dz (suc m'))) rz)
+            (add (mul k (suc m')) (add (mul dz (suc m')) rz))
+            (add (mul k (suc m')) r)
+            (add_assoc (mul k (suc m')) (mul dz (suc m')) rz)
+            (cong Nat Nat (\w -> add (mul k (suc m')) w) (add (mul dz (suc m')) rz) r (divmod_spec r m'))))
+      (modLtS r m')))
+def mod_add_mod1 : (u v m' : Nat) -> Path Nat (mod (add u v) (suc m')) (mod (add (mod u (suc m')) v) (suc m')) :=
+  \u v m' -> compPath Nat
+    (mod (add u v) (suc m'))
+    (mod (add (mul (div u (suc m')) (suc m')) (add (mod u (suc m')) v)) (suc m'))
+    (mod (add (mod u (suc m')) v) (suc m'))
+    (cong Nat Nat (\w -> mod w (suc m')) (add u v) (add (mul (div u (suc m')) (suc m')) (add (mod u (suc m')) v))
+       (compPath Nat (add u v) (add (add (mul (div u (suc m')) (suc m')) (mod u (suc m'))) v)
+          (add (mul (div u (suc m')) (suc m')) (add (mod u (suc m')) v))
+          (cong Nat Nat (\w -> add w v) u (add (mul (div u (suc m')) (suc m')) (mod u (suc m')))
+             (sym Nat (add (mul (div u (suc m')) (suc m')) (mod u (suc m'))) u (divmod_spec u m')))
+          (add_assoc (mul (div u (suc m')) (suc m')) (mod u (suc m')) v)))
+    (mod_mul_add (div u (suc m')) (add (mod u (suc m')) v) m')
+def mod_add_mod2 : (u v m' : Nat) -> Path Nat (mod (add u v) (suc m')) (mod (add u (mod v (suc m'))) (suc m')) :=
+  \u v m' -> compPath Nat
+    (mod (add u v) (suc m'))
+    (mod (add (mod v (suc m')) u) (suc m'))
+    (mod (add u (mod v (suc m'))) (suc m'))
+    (compPath Nat (mod (add u v) (suc m')) (mod (add v u) (suc m')) (mod (add (mod v (suc m')) u) (suc m'))
+       (cong Nat Nat (\w -> mod w (suc m')) (add u v) (add v u) (add_comm u v))
+       (mod_add_mod1 v u m'))
+    (cong Nat Nat (\w -> mod w (suc m')) (add (mod v (suc m')) u) (add u (mod v (suc m'))) (add_comm (mod v (suc m')) u))
+def mod_add : (x y m' : Nat) -> Path Nat (mod (add x y) (suc m')) (mod (add (mod x (suc m')) (mod y (suc m'))) (suc m')) :=
+  \x y m' -> compPath Nat
+    (mod (add x y) (suc m'))
+    (mod (add (mod x (suc m')) y) (suc m'))
+    (mod (add (mod x (suc m')) (mod y (suc m'))) (suc m'))
+    (mod_add_mod1 x y m') (mod_add_mod2 (mod x (suc m')) y m')
+def mod_mul_mod1 : (u v m' : Nat) -> Path Nat (mod (mul u v) (suc m')) (mod (mul (mod u (suc m')) v) (suc m')) :=
+  \u v m' -> compPath Nat
+    (mod (mul u v) (suc m'))
+    (mod (add (mul (mul (div u (suc m')) v) (suc m')) (mul (mod u (suc m')) v)) (suc m'))
+    (mod (mul (mod u (suc m')) v) (suc m'))
+    (cong Nat Nat (\w -> mod w (suc m')) (mul u v) (add (mul (mul (div u (suc m')) v) (suc m')) (mul (mod u (suc m')) v))
+       (compPath Nat (mul u v) (mul (add (mul (div u (suc m')) (suc m')) (mod u (suc m'))) v)
+          (add (mul (mul (div u (suc m')) v) (suc m')) (mul (mod u (suc m')) v))
+          (cong Nat Nat (\w -> mul w v) u (add (mul (div u (suc m')) (suc m')) (mod u (suc m')))
+             (sym Nat (add (mul (div u (suc m')) (suc m')) (mod u (suc m'))) u (divmod_spec u m')))
+          (compPath Nat
+             (mul (add (mul (div u (suc m')) (suc m')) (mod u (suc m'))) v)
+             (add (mul (mul (div u (suc m')) (suc m')) v) (mul (mod u (suc m')) v))
+             (add (mul (mul (div u (suc m')) v) (suc m')) (mul (mod u (suc m')) v))
+             (mul_dist_r (mul (div u (suc m')) (suc m')) (mod u (suc m')) v)
+             (cong Nat Nat (\w -> add w (mul (mod u (suc m')) v)) (mul (mul (div u (suc m')) (suc m')) v) (mul (mul (div u (suc m')) v) (suc m'))
+                (compPath Nat (mul (mul (div u (suc m')) (suc m')) v) (mul (div u (suc m')) (mul (suc m') v)) (mul (mul (div u (suc m')) v) (suc m'))
+                   (mul_assoc (div u (suc m')) (suc m') v)
+                   (compPath Nat (mul (div u (suc m')) (mul (suc m') v)) (mul (div u (suc m')) (mul v (suc m'))) (mul (mul (div u (suc m')) v) (suc m'))
+                      (cong Nat Nat (\w -> mul (div u (suc m')) w) (mul (suc m') v) (mul v (suc m')) (mul_comm (suc m') v))
+                      (sym Nat (mul (mul (div u (suc m')) v) (suc m')) (mul (div u (suc m')) (mul v (suc m'))) (mul_assoc (div u (suc m')) v (suc m')))))))))
+    (mod_mul_add (mul (div u (suc m')) v) (mul (mod u (suc m')) v) m')
+def mod_mul_mod2 : (u v m' : Nat) -> Path Nat (mod (mul u v) (suc m')) (mod (mul u (mod v (suc m'))) (suc m')) :=
+  \u v m' -> compPath Nat
+    (mod (mul u v) (suc m'))
+    (mod (mul (mod v (suc m')) u) (suc m'))
+    (mod (mul u (mod v (suc m'))) (suc m'))
+    (compPath Nat (mod (mul u v) (suc m')) (mod (mul v u) (suc m')) (mod (mul (mod v (suc m')) u) (suc m'))
+       (cong Nat Nat (\w -> mod w (suc m')) (mul u v) (mul v u) (mul_comm u v))
+       (mod_mul_mod1 v u m'))
+    (cong Nat Nat (\w -> mod w (suc m')) (mul (mod v (suc m')) u) (mul u (mod v (suc m'))) (mul_comm (mod v (suc m')) u))
+def mod_mul : (x y m' : Nat) -> Path Nat (mod (mul x y) (suc m')) (mod (mul (mod x (suc m')) (mod y (suc m'))) (suc m')) :=
+  \x y m' -> compPath Nat
+    (mod (mul x y) (suc m'))
+    (mod (mul (mod x (suc m')) y) (suc m'))
+    (mod (mul (mod x (suc m')) (mod y (suc m'))) (suc m'))
+    (mod_mul_mod1 x y m') (mod_mul_mod2 (mod x (suc m')) y m')

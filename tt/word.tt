@@ -16,3 +16,103 @@ word waddc : Word -> Word -> Sigma Word (\_ -> Word) := \a b -> (mkw (add (fst a
 word wsubb : Word -> Word -> Sigma Word (\_ -> Word) := \a b -> (mkw (add (fst a) (sub M64 (fst b))), mkw (blt (fst a) (fst b)))
 word wmull : Word -> Word -> Sigma Word (\_ -> Word) := \a b -> (mkw (mul (fst a) (fst b)), mkw (div (mul (fst a) (fst b)) M64))
 word wdivmod : Word -> Word -> Sigma Word (\_ -> Word) := \a b -> (mkw (div (fst a) (fst b)), mkw (mod (fst a) (fst b)))
+
+-- the laws: a Word is its first component (the second is irrelevant), so a path of first components lifts
+def wpath {X Y : Word} (p : Path Nat (fst X) (fst Y)) : Path Word X Y := \i -> (p i, snd X)
+def wadd_zero_r : (a : Word) -> Path Word (wadd a 0) a :=
+  \a -> wpath (compPath Nat (mod (add (fst a) 0) M64) (mod (fst a) M64) (fst a)
+          (cong Nat Nat (\x -> mod x M64) (add (fst a) 0) (fst a) (add_zero_r (fst a)))
+          (mod_small M63 (fst a) (snd a)))
+def wadd_zero_l : (a : Word) -> Path Word (wadd 0 a) a :=
+  \a -> wpath (compPath Nat (mod (add 0 (fst a)) M64) (mod (fst a) M64) (fst a)
+          (cong Nat Nat (\x -> mod x M64) (add 0 (fst a)) (fst a) (add_zero_l (fst a)))
+          (mod_small M63 (fst a) (snd a)))
+def mk_word_nat : (y : Nat) -> Path Nat (fst (mkw y)) (mod y M64) := \y -> prefl Nat (mod y M64)
+-- the semiring laws modulo 2^64: the fst components are mod-expressions, so mod's homomorphism laws decide them
+def wadd_comm : (a b : Word) -> Path Word (wadd a b) (wadd b a) :=
+  \a b -> wpath (cong Nat Nat (\w -> mod w M64) (add (fst a) (fst b)) (add (fst b) (fst a)) (add_comm (fst a) (fst b)))
+def wadd_assoc : (a b c : Word) -> Path Word (wadd (wadd a b) c) (wadd a (wadd b c)) :=
+  \a b c -> wpath (compPath Nat
+    (mod (add (mod (add (fst a) (fst b)) M64) (fst c)) M64)
+    (mod (add (add (fst a) (fst b)) (fst c)) M64)
+    (mod (add (fst a) (mod (add (fst b) (fst c)) M64)) M64)
+    (sym Nat (mod (add (add (fst a) (fst b)) (fst c)) M64) (mod (add (mod (add (fst a) (fst b)) M64) (fst c)) M64)
+       (mod_add_mod1 (add (fst a) (fst b)) (fst c) M63))
+    (compPath Nat
+       (mod (add (add (fst a) (fst b)) (fst c)) M64)
+       (mod (add (fst a) (add (fst b) (fst c))) M64)
+       (mod (add (fst a) (mod (add (fst b) (fst c)) M64)) M64)
+       (cong Nat Nat (\w -> mod w M64) (add (add (fst a) (fst b)) (fst c)) (add (fst a) (add (fst b) (fst c))) (add_assoc (fst a) (fst b) (fst c)))
+       (mod_add_mod2 (fst a) (add (fst b) (fst c)) M63)))
+def wmul_comm : (a b : Word) -> Path Word (wmul a b) (wmul b a) :=
+  \a b -> wpath (cong Nat Nat (\w -> mod w M64) (mul (fst a) (fst b)) (mul (fst b) (fst a)) (mul_comm (fst a) (fst b)))
+def wmul_assoc : (a b c : Word) -> Path Word (wmul (wmul a b) c) (wmul a (wmul b c)) :=
+  \a b c -> wpath (compPath Nat
+    (mod (mul (mod (mul (fst a) (fst b)) M64) (fst c)) M64)
+    (mod (mul (mul (fst a) (fst b)) (fst c)) M64)
+    (mod (mul (fst a) (mod (mul (fst b) (fst c)) M64)) M64)
+    (sym Nat (mod (mul (mul (fst a) (fst b)) (fst c)) M64) (mod (mul (mod (mul (fst a) (fst b)) M64) (fst c)) M64)
+       (mod_mul_mod1 (mul (fst a) (fst b)) (fst c) M63))
+    (compPath Nat
+       (mod (mul (mul (fst a) (fst b)) (fst c)) M64)
+       (mod (mul (fst a) (mul (fst b) (fst c))) M64)
+       (mod (mul (fst a) (mod (mul (fst b) (fst c)) M64)) M64)
+       (cong Nat Nat (\w -> mod w M64) (mul (mul (fst a) (fst b)) (fst c)) (mul (fst a) (mul (fst b) (fst c))) (mul_assoc (fst a) (fst b) (fst c)))
+       (mod_mul_mod2 (fst a) (mul (fst b) (fst c)) M63)))
+
+-- the additive inverse: x*(2^64-1) = x*2^64 - x = -x modulo 2^64 (no truncated subtraction needed)
+def wneg : Word -> Word := \a -> wmul a 18446744073709551615   -- x*(2^64-1) = -x; the wmul primitive erases to the runtime's, so negation is native
+def add_mul_pow : (x : Nat) -> Path Nat (add x (mul x M63)) (mul x M64) :=
+  \x -> compPath Nat (add x (mul x M63)) (add (mul x 1) (mul x M63)) (mul x M64)
+     (cong Nat Nat (\w -> add w (mul x M63)) x (mul x 1) (sym Nat (mul x 1) x (mul_one_r x)))
+     (compPath Nat (add (mul x 1) (mul x M63)) (mul x (add 1 M63)) (mul x M64)
+        (sym Nat (mul x (add 1 M63)) (add (mul x 1) (mul x M63)) (mul_dist_l x 1 M63))
+        (prefl Nat (mul x M64)))
+def wadd_neg : (a : Word) -> Path Word (wadd a (wneg a)) 0 :=
+  \a -> wpath (compPath Nat
+     (mod (add (fst a) (mod (mul (fst a) M63) M64)) M64)
+     (mod (add (fst a) (mul (fst a) M63)) M64)
+     (mod 0 M64)
+     (sym Nat (mod (add (fst a) (mul (fst a) M63)) M64) (mod (add (fst a) (mod (mul (fst a) M63) M64)) M64)
+        (mod_add_mod2 (fst a) (mul (fst a) M63) M63))
+     (compPath Nat
+     (mod (add (fst a) (mul (fst a) M63)) M64)
+     (mod (mul (fst a) M64) M64)
+     (mod 0 M64)
+     (cong Nat Nat (\w -> mod w M64) (add (fst a) (mul (fst a) M63)) (mul (fst a) M64) (add_mul_pow (fst a)))
+     (compPath Nat (mod (mul (fst a) M64) M64) (mod (mul (mod (fst a) M64) 0) M64) (mod 0 M64)
+        (mod_mul (fst a) M64 M63)
+        (cong Nat Nat (\w -> mod w M64) (mul (mod (fst a) M64) 0) 0 (mul_zero_r (mod (fst a) M64))))))
+def wadd_neg_l : (a : Word) -> Path Word (wadd (wneg a) a) 0 :=
+  \a -> compPath Word (wadd (wneg a) a) (wadd a (wneg a)) 0 (wadd_comm (wneg a) a) (wadd_neg a)
+def wmul_one_r : (a : Word) -> Path Word (wmul a 1) a :=
+  \a -> wpath (compPath Nat (mod (mul (fst a) 1) M64) (mod (fst a) M64) (fst a)
+     (cong Nat Nat (\w -> mod w M64) (mul (fst a) 1) (fst a) (mul_one_r (fst a)))
+     (mod_small M63 (fst a) (snd a)))
+def wmul_one_l : (a : Word) -> Path Word (wmul 1 a) a :=
+  \a -> compPath Word (wmul 1 a) (wmul a 1) a (wmul_comm 1 a) (wmul_one_r a)
+def wmul_zero_r : (a : Word) -> Path Word (wmul a 0) 0 :=
+  \a -> wpath (cong Nat Nat (\w -> mod w M64) (mul (fst a) 0) 0 (mul_zero_r (fst a)))
+def wmul_zero_l : (a : Word) -> Path Word (wmul 0 a) 0 :=
+  \a -> compPath Word (wmul 0 a) (wmul a 0) 0 (wmul_comm 0 a) (wmul_zero_r a)
+def wmul_dist_l : (a b c : Word) -> Path Word (wmul a (wadd b c)) (wadd (wmul a b) (wmul a c)) :=
+  \a b c -> wpath (compPath Nat
+    (mod (mul (fst a) (mod (add (fst b) (fst c)) M64)) M64)
+    (mod (mul (fst a) (add (fst b) (fst c))) M64)
+    (mod (add (mod (mul (fst a) (fst b)) M64) (mod (mul (fst a) (fst c)) M64)) M64)
+    (sym Nat (mod (mul (fst a) (add (fst b) (fst c))) M64) (mod (mul (fst a) (mod (add (fst b) (fst c)) M64)) M64)
+       (mod_mul_mod2 (fst a) (add (fst b) (fst c)) M63))
+    (compPath Nat
+       (mod (mul (fst a) (add (fst b) (fst c))) M64)
+       (mod (add (mul (fst a) (fst b)) (mul (fst a) (fst c))) M64)
+       (mod (add (mod (mul (fst a) (fst b)) M64) (mod (mul (fst a) (fst c)) M64)) M64)
+       (cong Nat Nat (\w -> mod w M64) (mul (fst a) (add (fst b) (fst c))) (add (mul (fst a) (fst b)) (mul (fst a) (fst c))) (mul_dist_l (fst a) (fst b) (fst c)))
+       (mod_add (mul (fst a) (fst b)) (mul (fst a) (fst c)) M63)))
+def wmul_dist_r : (a b c : Word) -> Path Word (wmul (wadd a b) c) (wadd (wmul a c) (wmul b c)) :=
+  \a b c -> compPath Word (wmul (wadd a b) c) (wmul c (wadd a b)) (wadd (wmul a c) (wmul b c))
+     (wmul_comm (wadd a b) c)
+     (compPath Word (wmul c (wadd a b)) (wadd (wmul c a) (wmul c b)) (wadd (wmul a c) (wmul b c))
+        (wmul_dist_l c a b)
+        (compPath Word (wadd (wmul c a) (wmul c b)) (wadd (wmul a c) (wmul c b)) (wadd (wmul a c) (wmul b c))
+           (cong Word Word (\w -> wadd w (wmul c b)) (wmul c a) (wmul a c) (wmul_comm c a))
+           (cong Word Word (\w -> wadd (wmul a c) w) (wmul c b) (wmul b c) (wmul_comm c b))))
