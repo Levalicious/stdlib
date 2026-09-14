@@ -62,14 +62,14 @@ def mul_dist_l : (a b c : Nat) -> Path Nat (mul a (add b c)) (add (mul a b) (mul
 -- the decidable order: ble r m = 1 and ble (suc r) m = 0 force r = m (the only fact the remainder's bound needs)
 def idToPath {A : U} {a b : A} (p : Id A a b) : Path A a b := substId (\y -> Path A a y) p (prefl A a)
 def pathToId {A : U} {a b : A} (p : Path A a b) : Id A a b := transp (\i -> Id A a (p i)) i0 refl
-def zeroNotOne : Id Nat 0 1 -> Empty := \e -> znots (idToPath e)
-def le_lt_eq : (r m : Nat) -> Id Nat (ble r m) 1 -> Id Nat (ble (suc r) m) 0 -> Path Nat r m :=
-  \r -> elim Nat (\r -> (m : Nat) -> Id Nat (ble r m) 1 -> Id Nat (ble (suc r) m) 0 -> Path Nat r m)
-          (\m -> elim Nat (\m -> Id Nat (ble 0 m) 1 -> Id Nat (ble 1 m) 0 -> Path Nat 0 m)
+def zeroNotOne .(e : Id Nat 0 1) : Empty := znots (idToPath e)
+def le_lt_eq : (r m : Nat) -> .(h1 : Id Nat (ble r m) 1) -> .(h2 : Id Nat (ble (suc r) m) 0) -> Path Nat r m :=
+  \r -> elim Nat (\r -> (m : Nat) -> .(h1 : Id Nat (ble r m) 1) -> .(h2 : Id Nat (ble (suc r) m) 0) -> Path Nat r m)
+          (\m -> elim Nat (\m -> .(h1 : Id Nat (ble 0 m) 1) -> .(h2 : Id Nat (ble 1 m) 0) -> Path Nat 0 m)
                    (\_ _ -> prefl Nat 0)
                    (\m' _ _ e -> elim Empty (\_ -> Path Nat 0 (suc m')) (zeroNotOne (substId (\y -> Id Nat y 1) e refl)))
                    m)
-          (\r' ih m -> elim Nat (\m -> Id Nat (ble (suc r') m) 1 -> Id Nat (ble (suc (suc r')) m) 0 -> Path Nat (suc r') m)
+          (\r' ih m -> elim Nat (\m -> .(h1 : Id Nat (ble (suc r') m) 1) -> .(h2 : Id Nat (ble (suc (suc r')) m) 0) -> Path Nat (suc r') m)
                          (\e _ -> elim Empty (\_ -> Path Nat (suc r') 0) (zeroNotOne e))
                          (\m' _ e1 e2 -> cong Nat Nat suc r' m' (ih m' e1 e2))
                          m)
@@ -80,15 +80,15 @@ def dm_q : Nat -> Nat -> Nat := \m x -> fst (dmiter m x)
 def dm_r : Nat -> Nat -> Nat := \m x -> snd (dmiter m x)
 def DmInv : (m x : Nat) -> Sigma Nat (\_ -> Nat) -> U :=
   \m x p -> Sigma (Path Nat (add (mul (fst p) m) (snd p)) x) (\_ -> Id Nat (blt (snd p) m) 1)
-def ble_ones : (a b k : Nat) -> Id Nat (ble a b) (suc k) -> Id Nat (ble a b) 1 :=
-  \a -> elim Nat (\a -> (b k : Nat) -> Id Nat (ble a b) (suc k) -> Id Nat (ble a b) 1)
+def ble_ones : (a b k : Nat) -> .(e : Id Nat (ble a b) (suc k)) -> Id Nat (ble a b) 1 :=
+  \a -> elim Nat (\a -> (b k : Nat) -> .(e : Id Nat (ble a b) (suc k)) -> Id Nat (ble a b) 1)
           (\b k _ -> refl)
-          (\a' ih b -> elim Nat (\b -> (k : Nat) -> Id Nat (ble (suc a') b) (suc k) -> Id Nat (ble (suc a') b) 1)
+          (\a' ih b -> elim Nat (\b -> (k : Nat) -> .(e : Id Nat (ble (suc a') b) (suc k)) -> Id Nat (ble (suc a') b) 1)
                          (\k e -> elim Empty (\_ -> Id Nat 0 1) (znots (idToPath e)))
                          (\b' _ k e -> ih b' k e)
                          b)
           a
-def blt_ones : (a b k : Nat) -> Id Nat (blt a b) (suc k) -> Id Nat (blt a b) 1 := \a b k e -> ble_ones (suc a) b k e
+def blt_ones : (a b k : Nat) -> .(e : Id Nat (blt a b) (suc k)) -> Id Nat (blt a b) 1 := \a b k e -> ble_ones (suc a) b k e
 def dm_step_inv : (m' x : Nat) (p : Sigma Nat (\_ -> Nat)) -> DmInv (suc m') x p -> DmInv (suc m') (suc x) (dmstep (suc m') p) :=
   \m' x p inv -> elim Nat (\c -> Id Nat c (blt (suc (snd p)) (suc m')) -> DmInv (suc m') (suc x) (ifN c (fst p, suc (snd p)) (suc (fst p), 0)))
      (\e -> ( compPath Nat (add (mul (suc (fst p)) (suc m')) 0) (add (suc m') (mul (fst p) (suc m'))) (suc x)
@@ -109,3 +109,104 @@ def dm_inv : (m' x : Nat) -> DmInv (suc m') x (dmiter (suc m') x) :=
   \m' x -> elim Nat (\x -> DmInv (suc m') x (dmiter (suc m') x)) (prefl Nat 0, refl) (\k ih -> dm_step_inv m' k (dmiter (suc m') k) ih) x
 def modLtS : (x m' : Nat) -> Lt (mod x (suc m')) (suc m') := \x m' -> snd (dm_inv m' x)
 def divmod_spec : (x m' : Nat) -> Path Nat (add (mul (div x (suc m')) (suc m')) (mod x (suc m'))) x := \x m' -> fst (dm_inv m' x)
+
+-- the order: a <= b is a witness d with a + d = b (the decidable ble is bridged below)
+def Le : Nat -> Nat -> U := \a b -> Sigma Nat (\d -> Path Nat (add a d) b)
+def le_refl : (a : Nat) -> Le a a := \a -> (0, add_zero_r a)
+def le_trans : (a b c : Nat) -> Le a b -> Le b c -> Le a c :=
+  \a b c p q -> (add (fst p) (fst q),
+    compPath Nat (add a (add (fst p) (fst q))) (add (add a (fst p)) (fst q)) c
+      (sym Nat (add (add a (fst p)) (fst q)) (add a (add (fst p) (fst q))) (add_assoc a (fst p) (fst q)))
+      (compPath Nat (add (add a (fst p)) (fst q)) (add b (fst q)) c
+         (cong Nat Nat (\x -> add x (fst q)) (add a (fst p)) b (snd p)) (snd q)))
+def le_suc : (a b : Nat) -> Le a b -> Le a (suc b) :=
+  \a b p -> (suc (fst p), compPath Nat (add a (suc (fst p))) (suc (add a (fst p))) (suc b) (add_suc_r a (fst p)) (cong Nat Nat suc (add a (fst p)) b (snd p)))
+def add_cancel_l : (m a b : Nat) -> Path Nat (add m a) (add m b) -> Path Nat a b :=
+  \m a b -> elim Nat (\m -> Path Nat (add m a) (add m b) -> Path Nat a b) (\p -> p) (\k ih p -> ih (injSuc p)) m
+def add_zero_both : (a b : Nat) -> Path Nat (add a b) 0 -> Path Nat a 0 :=
+  \a b -> elim Nat (\a -> Path Nat (add a b) 0 -> Path Nat a 0) (\_ -> prefl Nat 0) (\k _ p -> elim Empty (\_ -> Path Nat (suc k) 0) (snotz p)) a
+def le_antisym : (a b : Nat) -> Le a b -> Le b a -> Path Nat a b :=
+  \a b p q -> compPath Nat a (add a 0) b (sym Nat (add a 0) a (add_zero_r a))
+    (compPath Nat (add a 0) (add a (fst p)) b
+       (cong Nat Nat (\x -> add a x) 0 (fst p)
+          (sym Nat (fst p) 0 (add_zero_both (fst p) (fst q)
+             (add_cancel_l a (add (fst p) (fst q)) 0
+                (compPath Nat (add a (add (fst p) (fst q))) a (add a 0) (snd (le_trans a b a p q)) (sym Nat (add a 0) a (add_zero_r a)))))))
+       (snd p))
+def add_swap_r : (a c d : Nat) -> Path Nat (add (add a c) d) (add (add a d) c) :=
+  \a c d -> compPath Nat (add (add a c) d) (add a (add c d)) (add (add a d) c) (add_assoc a c d)
+              (compPath Nat (add a (add c d)) (add a (add d c)) (add (add a d) c)
+                 (cong Nat Nat (\x -> add a x) (add c d) (add d c) (add_comm c d))
+                 (sym Nat (add (add a d) c) (add a (add d c)) (add_assoc a d c)))
+def add_mono_r : (a b c : Nat) -> Le a b -> Le (add a c) (add b c) :=
+  \a b c p -> (fst p, compPath Nat (add (add a c) (fst p)) (add (add a (fst p)) c) (add b c) (add_swap_r a c (fst p))
+                        (cong Nat Nat (\x -> add x c) (add a (fst p)) b (snd p)))
+def add_mono_l : (a b c : Nat) -> Le a b -> Le (add c a) (add c b) :=
+  \a b c p -> (fst p, compPath Nat (add (add c a) (fst p)) (add c (add a (fst p))) (add c b) (add_assoc c a (fst p))
+                        (cong Nat Nat (\x -> add c x) (add a (fst p)) b (snd p)))
+-- m + x + 1 <= m is absurd
+def lt_add_absurd : (m x : Nat) -> Le (suc (add m x)) m -> Empty :=
+  \m x p -> snotz (add_cancel_l m (suc (add x (fst p))) 0
+    (compPath Nat (add m (suc (add x (fst p)))) m (add m 0)
+       (compPath Nat (add m (suc (add x (fst p)))) (suc (add m (add x (fst p)))) m
+          (add_suc_r m (add x (fst p)))
+          (compPath Nat (suc (add m (add x (fst p)))) (suc (add (add m x) (fst p))) m
+             (cong Nat Nat suc (add m (add x (fst p))) (add (add m x) (fst p)) (sym Nat (add (add m x) (fst p)) (add m (add x (fst p))) (add_assoc m x (fst p))))
+             (snd p)))
+       (sym Nat (add m 0) m (add_zero_r m))))
+
+-- the decidable order agrees with the witnessed one
+def ble_le : (a b : Nat) -> .(e : Id Nat (ble a b) 1) -> Le a b :=
+  \a -> elim Nat (\a -> (b : Nat) -> .(e : Id Nat (ble a b) 1) -> Le a b)
+         (\b _ -> (b, prefl Nat b))
+         (\a' ih b -> elim Nat (\b -> .(e : Id Nat (ble (suc a') b) 1) -> Le (suc a') b)
+                        (\e -> elim Empty (\_ -> Le (suc a') 0) (zeroNotOne e))
+                        (\b' _ e -> (fst (ih b' e), cong Nat Nat suc (add a' (fst (ih b' e))) b' (snd (ih b' e))))
+                        b)
+         a
+def le_ble : (a b : Nat) -> Le a b -> Id Nat (ble a b) 1 :=
+  \a -> elim Nat (\a -> (b : Nat) -> Le a b -> Id Nat (ble a b) 1)
+         (\b _ -> refl)
+         (\a' ih b -> elim Nat (\b -> Le (suc a') b -> Id Nat (ble (suc a') b) 1)
+                        (\p -> elim Empty (\_ -> Id Nat 0 1) (snotz (snd p)))
+                        (\b' _ p -> ih b' (fst p, injSuc (snd p)))
+                        b)
+         a
+def lt_le : (a b : Nat) -> .(h : Lt a b) -> Le (suc a) b := \a b h -> ble_le (suc a) b h
+def le_lt : (a b : Nat) -> Le (suc a) b -> Lt a b := \a b p -> le_ble (suc a) b p
+
+-- quotient and remainder are unique: q*m + r = q'*m + r' with r, r' < m forces q = q' and r = r' (m = suc m')
+def dm_eq : (m' q q' r r' : Nat) -> Path Nat (add (mul q (suc m')) r) (add (mul q' (suc m')) r') -> .(hr : Lt r (suc m')) -> .(hr' : Lt r' (suc m')) ->
+            Sigma (Path Nat q q') (\_ -> Path Nat r r') :=
+  \m' q -> elim Nat (\q -> (q' r r' : Nat) -> Path Nat (add (mul q (suc m')) r) (add (mul q' (suc m')) r') -> .(hr : Lt r (suc m')) -> .(hr' : Lt r' (suc m')) ->
+                          Sigma (Path Nat q q') (\_ -> Path Nat r r'))
+    (\q' -> elim Nat (\q' -> (r r' : Nat) -> Path Nat r (add (mul q' (suc m')) r') -> .(hr : Lt r (suc m')) -> .(hr' : Lt r' (suc m')) -> Sigma (Path Nat 0 q') (\_ -> Path Nat r r'))
+              (\r r' e _ _ -> (prefl Nat 0, e))
+              (\q'' _ r r' e hr _ -> elim Empty (\_ -> Sigma (Path Nat 0 (suc q'')) (\_ -> Path Nat r r'))
+                 (lt_add_absurd (suc m') (add (mul q'' (suc m')) r')
+                    (transp (\i -> Le (suc (compPath Nat r (add (add (suc m') (mul q'' (suc m'))) r') (add (suc m') (add (mul q'' (suc m')) r')) e (add_assoc (suc m') (mul q'' (suc m')) r') i)) (suc m')) i0
+                       (lt_le r (suc m') hr))))
+              q')
+    (\q'' ih q' -> elim Nat (\q' -> (r r' : Nat) -> Path Nat (add (add (suc m') (mul q'' (suc m'))) r) (add (mul q' (suc m')) r') -> .(hr : Lt r (suc m')) -> .(hr' : Lt r' (suc m')) ->
+                                    Sigma (Path Nat (suc q'') q') (\_ -> Path Nat r r'))
+              (\r r' e _ hr' -> elim Empty (\_ -> Sigma (Path Nat (suc q'') 0) (\_ -> Path Nat r r'))
+                 (lt_add_absurd (suc m') (add (mul q'' (suc m')) r)
+                    (transp (\i -> Le (suc (compPath Nat r' (add (add (suc m') (mul q'' (suc m'))) r) (add (suc m') (add (mul q'' (suc m')) r)) (sym Nat (add (add (suc m') (mul q'' (suc m'))) r) r' e) (add_assoc (suc m') (mul q'' (suc m')) r) i)) (suc m')) i0
+                       (lt_le r' (suc m') hr'))))
+              (\q''' _ r r' e hr hr' ->
+                 (cong Nat Nat suc q'' q''' (fst (ih q''' r r' (add_cancel_l (suc m') (add (mul q'' (suc m')) r) (add (mul q''' (suc m')) r')
+                      (compPath Nat (add (suc m') (add (mul q'' (suc m')) r)) (add (add (suc m') (mul q'' (suc m'))) r) (add (suc m') (add (mul q''' (suc m')) r'))
+                         (sym Nat (add (add (suc m') (mul q'' (suc m'))) r) (add (suc m') (add (mul q'' (suc m')) r)) (add_assoc (suc m') (mul q'' (suc m')) r))
+                         (compPath Nat (add (add (suc m') (mul q'' (suc m'))) r) (add (add (suc m') (mul q''' (suc m'))) r') (add (suc m') (add (mul q''' (suc m')) r'))
+                            e (add_assoc (suc m') (mul q''' (suc m')) r')))) hr hr')),
+                  snd (ih q''' r r' (add_cancel_l (suc m') (add (mul q'' (suc m')) r) (add (mul q''' (suc m')) r')
+                      (compPath Nat (add (suc m') (add (mul q'' (suc m')) r)) (add (add (suc m') (mul q'' (suc m'))) r) (add (suc m') (add (mul q''' (suc m')) r'))
+                         (sym Nat (add (add (suc m') (mul q'' (suc m'))) r) (add (suc m') (add (mul q'' (suc m')) r)) (add_assoc (suc m') (mul q'' (suc m')) r))
+                         (compPath Nat (add (add (suc m') (mul q'' (suc m'))) r) (add (add (suc m') (mul q''' (suc m'))) r') (add (suc m') (add (mul q''' (suc m')) r'))
+                            e (add_assoc (suc m') (mul q''' (suc m')) r')))) hr hr')))
+              q')
+    q
+def dm_unique : (m' q r x : Nat) -> Path Nat (add (mul q (suc m')) r) x -> .(h : Lt r (suc m')) -> Sigma (Path Nat q (div x (suc m'))) (\_ -> Path Nat r (mod x (suc m'))) :=
+  \m' q r x e h -> dm_eq m' q (div x (suc m')) r (mod x (suc m')) (compPath Nat (add (mul q (suc m')) r) x (add (mul (div x (suc m')) (suc m')) (mod x (suc m'))) e (sym Nat (add (mul (div x (suc m')) (suc m')) (mod x (suc m'))) x (divmod_spec x m'))) h (modLtS x m')
+def mod_small : (m' x : Nat) -> .(h : Lt x (suc m')) -> Path Nat (mod x (suc m')) x := \m' x h -> sym Nat x (mod x (suc m')) (snd (dm_unique m' 0 x x (prefl Nat x) h))
+def div_small : (m' x : Nat) -> .(h : Lt x (suc m')) -> Path Nat (div x (suc m')) 0 := \m' x h -> sym Nat 0 (div x (suc m')) (fst (dm_unique m' 0 x x (prefl Nat x) h))
