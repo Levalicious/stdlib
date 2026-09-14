@@ -388,3 +388,7 @@ def dm_q_le_one : (m' x : Nat) -> Le (suc x) (mul 2 (suc m')) -> Le (dm_q (suc m
           (le_trans (mul 2 (suc m')) (mul (dm_q (suc m') x) (suc m')) x
              (le_mul_r 2 (dm_q (suc m') x) (suc m') h2)
              (dm_q_mul_le m' x))))
+
+-- nothing of the form suc (suc j) is below 1 (the shape the carry's split refutes with)
+def le_one_absurd : (j : Nat) -> Le (suc (suc j)) 1 -> Empty :=
+  \j h -> snotz (injSuc (snd h))
