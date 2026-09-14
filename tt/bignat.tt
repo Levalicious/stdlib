@@ -1,0 +1,45 @@
+#import word
+-- bignat.tt: arbitrary-precision naturals over limbs, verified against the kernel's Nat (M16b b5).
+-- Limbs are Nats (no invariant needed; every limb and carry fact goes through divmod_spec), most significant
+-- first, and bval maps a limb list into the kernel's bignum Nat, so the kernel computes both sides of every law.
+def BigNat : U := List Nat
+def bvalAux (acc : Nat) (x : BigNat) : Nat :=
+  elim List (\_ -> Nat -> Nat) (\acc -> acc) (\l rest ih -> \acc -> ih (add (mul acc M64) l)) x acc
+def bval (x : BigNat) : Nat := bvalAux 0 x
+-- one limb column: the carry in from the less significant side, the two limbs; the result is (carry out, digit)
+def addLimbs (c a b : Nat) : Sigma Nat (\_ -> Nat) :=
+  (div (add (add a b) c) M64, mod (add (add a b) c) M64)
+-- the digits, least significant column first by recursion on the tails; the entering carry comes from them
+def baddGo (x y : BigNat) : Sigma Nat (\_ -> BigNat) :=
+  elim List (\_ -> BigNat -> Sigma Nat (\_ -> BigNat))
+    (\y -> elim List (\_ -> Sigma Nat (\_ -> BigNat))
+       (0, lnil {Nat})
+       (\b bs ihb -> (fst (addLimbs (fst ihb) 0 b), lcons (snd (addLimbs (fst ihb) 0 b)) (snd ihb)))
+       y)
+    (\a as iha -> \y -> elim List (\_ -> Sigma Nat (\_ -> BigNat))
+       (fst (addLimbs (fst (iha (lnil {Nat}))) a 0),
+        lcons (snd (addLimbs (fst (iha (lnil {Nat}))) a 0)) (snd (iha (lnil {Nat}))))
+       (\b bs ihb -> (fst (addLimbs (fst (iha bs)) a b),
+                      lcons (snd (addLimbs (fst (iha bs)) a b)) (snd (iha bs))))
+       y)
+    x y
+-- lengths, leading zeros (value-free: bvalAux 0 of zeros is 0) and padding to a common length
+def len : BigNat -> Nat := elim List (\_ -> Nat) 0 (\_ r ih -> suc ih)
+def zeros : Nat -> BigNat := elim Nat (\_ -> BigNat) (lnil {Nat}) (\_ ih -> lcons 0 ih)
+def app (x y : BigNat) : BigNat := elim List (\_ -> BigNat) y (\l r ih -> lcons l ih) x
+def padTo (n : Nat) (x : BigNat) : BigNat := app (zeros (sub n (len x))) x
+def bvalAux_zeros0 : (d : Nat) -> Path Nat (bvalAux 0 (zeros d)) 0 :=
+  \d -> elim Nat (\d -> Path Nat (bvalAux 0 (zeros d)) 0) (prefl Nat 0) (\k ih -> ih) d
+def bvalAux_app : (a b : BigNat) (acc : Nat) -> Path Nat (bvalAux acc (app a b)) (bvalAux (bvalAux acc a) b) :=
+  \a -> elim List (\a -> (b : BigNat) (acc : Nat) -> Path Nat (bvalAux acc (app a b)) (bvalAux (bvalAux acc a) b))
+    (\b acc -> prefl Nat (bvalAux acc b))
+    (\l r ih -> \b acc -> ih b (add (mul acc M64) l))
+    a
+def bval_padTo : (n : Nat) (x : BigNat) -> Path Nat (bval (padTo n x)) (bval x) :=
+  \n x -> compPath Nat (bvalAux 0 (app (zeros (sub n (len x))) x)) (bvalAux (bvalAux 0 (zeros (sub n (len x)))) x) (bvalAux 0 x)
+     (bvalAux_app (zeros (sub n (len x))) x 0)
+     (cong Nat Nat (\w -> bvalAux w x) (bvalAux 0 (zeros (sub n (len x)))) 0 (bvalAux_zeros0 (sub n (len x))))
+def badd (x y : BigNat) : BigNat :=
+  let n : Nat := add (len x) (len y) in
+  let q : Sigma Nat (\_ -> BigNat) := baddGo (padTo n x) (padTo n y) in
+  ifN (beq (fst q) 0) (snd q) (lcons (fst q) (snd q))
