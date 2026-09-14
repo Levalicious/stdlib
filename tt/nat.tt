@@ -296,3 +296,23 @@ def mod_mul : (x y m' : Nat) -> Path Nat (mod (mul x y) (suc m')) (mod (mul (mod
     (mod (mul (mod x (suc m')) y) (suc m'))
     (mod (mul (mod x (suc m')) (mod y (suc m'))) (suc m'))
     (mod_mul_mod1 x y m') (mod_mul_mod2 (mod x (suc m')) y m')
+
+-- ---- truncated subtraction (monus): the layer the BigNat padding needs ----
+def sub_zero : (m : Nat) -> Path Nat (sub m 0) m := \m -> prefl Nat m
+def sub_sucsuc : (m n : Nat) -> Path Nat (sub (suc m) (suc n)) (sub m n) :=
+  \m n -> elim Nat (\n -> Path Nat (sub (suc m) (suc n)) (sub m n)) (prefl Nat m) (\j ih -> cong Nat Nat pred (sub (suc m) (suc j)) (sub m j) ih) n
+def sub_self : (n : Nat) -> Path Nat (sub n n) 0 :=
+  \n -> elim Nat (\n -> Path Nat (sub n n) 0) (prefl Nat 0) (\k ih -> compPath Nat (sub (suc k) (suc k)) (sub k k) 0 (sub_sucsuc k k) ih) n
+def sub_add_d : (n d : Nat) -> Path Nat (sub (add n d) n) d :=
+  \n -> elim Nat (\n -> (d : Nat) -> Path Nat (sub (add n d) n) d)
+    (\d -> compPath Nat (sub (add 0 d) 0) (add 0 d) d (sub_zero (add 0 d)) (add_zero_l d))
+    (\k ih -> \d -> compPath Nat (sub (add (suc k) d) (suc k)) (sub (add k d) k) d (sub_sucsuc (add k d) k) (ih d))
+    n
+def sub_add_le : (m n : Nat) -> Le n m -> Path Nat (add (sub m n) n) m :=
+  \m n p -> compPath Nat (add (sub m n) n) (add n (fst p)) m
+    (compPath Nat (add (sub m n) n) (add (sub (add n (fst p)) n) n) (add n (fst p))
+       (cong Nat Nat (\w -> add (sub w n) n) m (add n (fst p)) (sym Nat (add n (fst p)) m (snd p)))
+       (compPath Nat (add (sub (add n (fst p)) n) n) (add (fst p) n) (add n (fst p))
+          (cong Nat Nat (\w -> add w n) (sub (add n (fst p)) n) (fst p) (sub_add_d n (fst p)))
+          (add_comm (fst p) n)))
+    (snd p)

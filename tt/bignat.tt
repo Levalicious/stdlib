@@ -43,3 +43,64 @@ def badd (x y : BigNat) : BigNat :=
   let n : Nat := add (len x) (len y) in
   let q : Sigma Nat (\_ -> BigNat) := baddGo (padTo n x) (padTo n y) in
   ifN (beq (fst q) 0) (snd q) (lcons (fst q) (snd q))
+
+-- ---- the correctness layer: bval of the fold is the sum ----
+def pow64 : Nat -> Nat := elim Nat (\_ -> Nat) 1 (\_ ih -> mul ih M64)   -- the variable first: mul recurses on it, so a neutral exponent stays cheap
+def len_zeros : (d : Nat) -> Path Nat (len (zeros d)) d :=
+  \d -> elim Nat (\d -> Path Nat (len (zeros d)) d) (prefl Nat 0) (\k ih -> cong Nat Nat suc (len (zeros k)) k ih) d
+def len_app : (a b : BigNat) -> Path Nat (len (app a b)) (add (len a) (len b)) :=
+  \a -> elim List (\a -> (b : BigNat) -> Path Nat (len (app a b)) (add (len a) (len b)))
+    (\b -> prefl Nat (len b))
+    (\l r ih -> \b -> cong Nat Nat suc (len (app r b)) (add (len r) (len b)) (ih b))
+    a
+def len_padTo : (n : Nat) (x : BigNat) -> Path Nat (len (padTo n x)) (add (sub n (len x)) (len x)) :=
+  \n x -> compPath Nat (len (app (zeros (sub n (len x))) x)) (add (len (zeros (sub n (len x)))) (len x)) (add (sub n (len x)) (len x))
+    (len_app (zeros (sub n (len x))) x)
+    (cong Nat Nat (\w -> add w (len x)) (len (zeros (sub n (len x)))) (sub n (len x)) (len_zeros (sub n (len x))))
+def len_padTo_common : (x y : BigNat) -> Path Nat (len (padTo (add (len x) (len y)) x)) (add (len x) (len y)) :=
+  \x y -> compPath Nat (len (padTo (add (len x) (len y)) x)) (add (sub (add (len x) (len y)) (len x)) (len x)) (add (len x) (len y))
+    (len_padTo (add (len x) (len y)) x)
+    (sub_add_le (add (len x) (len y)) (len x) (len y, prefl Nat (add (len x) (len y))))
+def bval_ifN_carry : (c : Nat) (r : BigNat) -> Path Nat (bval (ifN (beq c 0) r (lcons c r))) (bvalAux c r) :=
+  \c -> elim Nat (\c -> (r : BigNat) -> Path Nat (bval (ifN (beq c 0) r (lcons c r))) (bvalAux c r))
+    (\r -> prefl Nat (bvalAux 0 r))
+    (\k ih -> \r -> prefl Nat (bvalAux (suc k) r))
+    c
+def bvalAux_add : (X C : Nat) (D : BigNat) -> Path Nat (bvalAux (add X C) D) (add (mul X (pow64 (len D))) (bvalAux C D)) :=
+  \X C D -> elim List (\D -> (X C : Nat) -> Path Nat (bvalAux (add X C) D) (add (mul X (pow64 (len D))) (bvalAux C D)))
+    (\X C -> cong Nat Nat (\w -> add w C) X (mul X 1) (sym Nat (mul X 1) X (mul_one_r X)))
+    (\l r ih -> \X C -> compPath Nat
+       (bvalAux (add (mul (add X C) M64) l) r)
+       (add (mul (mul (add X C) M64) (pow64 (len r))) (bvalAux l r))
+       (add (mul X (mul (pow64 (len r)) M64)) (bvalAux (add (mul C M64) l) r))
+       (ih (mul (add X C) M64) l)
+       (compPath Nat
+          (add (mul (mul (add X C) M64) (pow64 (len r))) (bvalAux l r))
+          (add (mul X (mul (pow64 (len r)) M64)) (add (mul (mul C M64) (pow64 (len r))) (bvalAux l r)))
+          (add (mul X (mul (pow64 (len r)) M64)) (bvalAux (add (mul C M64) l) r))
+          (compPath Nat
+             (add (mul (mul (add X C) M64) (pow64 (len r))) (bvalAux l r))
+             (add (mul (add X C) (mul (pow64 (len r)) M64)) (bvalAux l r))
+             (add (mul X (mul (pow64 (len r)) M64)) (add (mul (mul C M64) (pow64 (len r))) (bvalAux l r)))
+             (cong Nat Nat (\w -> add w (bvalAux l r)) (mul (mul (add X C) M64) (pow64 (len r))) (mul (add X C) (mul (pow64 (len r)) M64))
+                (compPath Nat (mul (mul (add X C) M64) (pow64 (len r))) (mul (add X C) (mul M64 (pow64 (len r)))) (mul (add X C) (mul (pow64 (len r)) M64))
+                   (mul_assoc (add X C) M64 (pow64 (len r)))
+                   (cong Nat Nat (\w -> mul (add X C) w) (mul M64 (pow64 (len r))) (mul (pow64 (len r)) M64) (mul_comm M64 (pow64 (len r))))))
+             (compPath Nat
+                (add (mul (add X C) (mul (pow64 (len r)) M64)) (bvalAux l r))
+                (add (add (mul X (mul (pow64 (len r)) M64)) (mul C (mul (pow64 (len r)) M64))) (bvalAux l r))
+                (add (mul X (mul (pow64 (len r)) M64)) (add (mul (mul C M64) (pow64 (len r))) (bvalAux l r)))
+                (cong Nat Nat (\w -> add w (bvalAux l r)) (mul (add X C) (mul (pow64 (len r)) M64)) (add (mul X (mul (pow64 (len r)) M64)) (mul C (mul (pow64 (len r)) M64))) (mul_dist_r X C (mul (pow64 (len r)) M64)))
+                (compPath Nat
+                   (add (add (mul X (mul (pow64 (len r)) M64)) (mul C (mul (pow64 (len r)) M64))) (bvalAux l r))
+                   (add (mul X (mul (pow64 (len r)) M64)) (add (mul C (mul (pow64 (len r)) M64)) (bvalAux l r)))
+                   (add (mul X (mul (pow64 (len r)) M64)) (add (mul (mul C M64) (pow64 (len r))) (bvalAux l r)))
+                   (add_assoc (mul X (mul (pow64 (len r)) M64)) (mul C (mul (pow64 (len r)) M64)) (bvalAux l r))
+                   (cong Nat Nat (\w -> add (mul X (mul (pow64 (len r)) M64)) (add w (bvalAux l r))) (mul C (mul (pow64 (len r)) M64)) (mul (mul C M64) (pow64 (len r)))
+                      (sym Nat (mul (mul C M64) (pow64 (len r))) (mul C (mul (pow64 (len r)) M64))
+                         (compPath Nat (mul (mul C M64) (pow64 (len r))) (mul C (mul M64 (pow64 (len r)))) (mul C (mul (pow64 (len r)) M64))
+                            (mul_assoc C M64 (pow64 (len r)))
+                            (cong Nat Nat (\w -> mul C w) (mul M64 (pow64 (len r))) (mul (pow64 (len r)) M64) (mul_comm M64 (pow64 (len r))))))))))
+          (sym Nat (add (mul X (mul (pow64 (len r)) M64)) (bvalAux (add (mul C M64) l) r)) (add (mul X (mul (pow64 (len r)) M64)) (add (mul (mul C M64) (pow64 (len r))) (bvalAux l r)))
+             (cong Nat Nat (\w -> add (mul X (mul (pow64 (len r)) M64)) w) (bvalAux (add (mul C M64) l) r) (add (mul (mul C M64) (pow64 (len r))) (bvalAux l r)) (ih (mul C M64) l)))))
+    D X C
