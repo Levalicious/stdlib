@@ -335,3 +335,30 @@ def lt_self_absurd : (x : Nat) -> Le (suc x) x -> Empty :=
     (\p -> snotz (snd p))
     (\k ih p -> ih (fst p, injSuc (snd p)))
     x
+
+-- rearrangement of four summands (the same as bignat.tt's interchange, kept here for the word layer)
+def add_interchange : (a b c d : Nat) -> Path Nat (add (add a b) (add c d)) (add (add a c) (add b d)) :=
+  \a b c d -> compPath Nat (add (add a b) (add c d)) (add a (add b (add c d))) (add (add a c) (add b d))
+    (add_assoc a b (add c d))
+    (compPath Nat (add a (add b (add c d))) (add a (add c (add b d))) (add (add a c) (add b d))
+       (cong Nat Nat (\w -> add a w) (add b (add c d)) (add c (add b d)) (add_swap b c d))
+       (sym Nat (add (add a c) (add b d)) (add a (add c (add b d))) (add_assoc a c (add b d))))
+-- 2*d is d+d (mul computes 2*d to d + 1*d, and 1*d to d + 0*d)
+def mul_two : (d : Nat) -> Path Nat (mul 2 d) (add d d) :=
+  \d -> cong Nat Nat (\w -> add d w) (add d 0) d (add_zero_r d)
+-- a sum of two things below d is below 2*d - the strict bound the carry's quotient case ends in
+def lt_add_two_le : (a b d : Nat) -> Le (suc a) d -> Le (suc b) d -> Le (suc (add a b)) (mul 2 d) :=
+  \a b d p q -> (suc (add (fst p) (fst q)),
+    compPath Nat (add (suc (add a b)) (suc (add (fst p) (fst q)))) (suc (suc (add (add a b) (add (fst p) (fst q))))) (mul 2 d)
+      (cong Nat Nat suc (add (add a b) (suc (add (fst p) (fst q)))) (suc (add (add a b) (add (fst p) (fst q)))) (add_suc_r (add a b) (add (fst p) (fst q))))
+      (compPath Nat (suc (suc (add (add a b) (add (fst p) (fst q))))) (suc (suc (add (add a (fst p)) (add b (fst q))))) (mul 2 d)
+         (cong Nat Nat suc (suc (add (add a b) (add (fst p) (fst q)))) (suc (add (add a (fst p)) (add b (fst q))))
+            (cong Nat Nat suc (add (add a b) (add (fst p) (fst q))) (add (add a (fst p)) (add b (fst q))) (add_interchange a b (fst p) (fst q))))
+         (compPath Nat (suc (suc (add (add a (fst p)) (add b (fst q))))) (add (suc (add a (fst p))) (suc (add b (fst q)))) (mul 2 d)
+            (sym Nat (add (suc (add a (fst p))) (suc (add b (fst q)))) (suc (suc (add (add a (fst p)) (add b (fst q)))))
+               (cong Nat Nat suc (add (add a (fst p)) (suc (add b (fst q)))) (suc (add (add a (fst p)) (add b (fst q)))) (add_suc_r (add a (fst p)) (add b (fst q)))))
+            (compPath Nat (add (suc (add a (fst p))) (suc (add b (fst q)))) (add d (suc (add b (fst q)))) (mul 2 d)
+               (cong Nat Nat (\w -> add w (suc (add b (fst q)))) (add (suc a) (fst p)) d (snd p))
+               (compPath Nat (add d (suc (add b (fst q)))) (add d d) (mul 2 d)
+                  (cong Nat Nat (\w -> add d w) (add (suc b) (fst q)) d (snd q))
+                  (sym Nat (mul 2 d) (add d d) (mul_two d)))))))
