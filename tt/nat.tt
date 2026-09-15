@@ -392,3 +392,53 @@ def dm_q_le_one : (m' x : Nat) -> Le (suc x) (mul 2 (suc m')) -> Le (dm_q (suc m
 -- nothing of the form suc (suc j) is below 1 (the shape the carry's split refutes with)
 def le_one_absurd : (j : Nat) -> Le (suc (suc j)) 1 -> Empty :=
   \j h -> snotz (injSuc (snd h))
+
+-- ---- the division iteration with the slack carried (M16b b5) ----
+-- The step is decided by the SLACK's structure - zero wraps, a successor carries - never by a comparison. That matters
+-- because a blt against a machine-sized literal is a decision the checker would have to unroll (2^64 steps), while a
+-- split on a hypothesis's structure is free. The invariant carries the slack as its Le, so the step's own input is
+-- what decides it, and both branches come out constructive.
+def SInv : (m x : Nat) -> Sigma Nat (\_ -> Nat) -> U :=
+  \m x p -> Sigma (Path Nat (add (mul (fst p) m) (snd p)) x) (\_ -> Le (suc (snd p)) m)
+def sstep : (m' : Nat) (p : Sigma Nat (\_ -> Nat)) -> Le (suc (snd p)) (suc m') -> Sigma Nat (\_ -> Nat) :=
+  \m' p h -> elim Nat (\d -> Path Nat (add (suc (snd p)) d) (suc m') -> Sigma Nat (\_ -> Nat))
+    (\_ -> (suc (fst p), 0))
+    (\d' _ _ -> (fst p, suc (snd p)))
+    (fst h) (snd h)
+def s_step_inv : (m' x : Nat) (p : Sigma Nat (\_ -> Nat)) (inv : SInv (suc m') x p)
+               -> SInv (suc m') (suc x) (sstep m' p (snd inv)) :=
+  \m' x p inv -> elim Nat (\d -> (hp : Path Nat (add (suc (snd p)) d) (suc m')) -> SInv (suc m') (suc x) (sstep m' p (d, hp)))
+    (\hp -> ( compPath Nat (add (mul (suc (fst p)) (suc m')) 0) (add (suc m') (mul (fst p) (suc m'))) (suc x)
+                (add_zero_r (add (suc m') (mul (fst p) (suc m'))))
+                (compPath Nat (suc (add m' (mul (fst p) (suc m')))) (suc (add (mul (fst p) (suc m')) m')) (suc x)
+                   (cong Nat Nat suc (add m' (mul (fst p) (suc m'))) (add (mul (fst p) (suc m')) m') (add_comm m' (mul (fst p) (suc m'))))
+                   (cong Nat Nat suc (add (mul (fst p) (suc m')) m') x
+                      (compPath Nat (add (mul (fst p) (suc m')) m') (add (mul (fst p) (suc m')) (snd p)) x
+                         (cong Nat Nat (\y -> add (mul (fst p) (suc m')) y) m' (snd p)
+                            (compPath Nat m' (add (snd p) 0) (snd p)
+                               (sym Nat (add (snd p) 0) m' (injSuc hp))
+                               (add_zero_r (snd p))))
+                         (fst inv)))),
+              (m', prefl Nat (suc m')) ))
+    (\d' _ hp -> ( compPath Nat (add (mul (fst p) (suc m')) (suc (snd p))) (suc (add (mul (fst p) (suc m')) (snd p))) (suc x)
+                     (add_suc_r (mul (fst p) (suc m')) (snd p))
+                     (cong Nat Nat suc (add (mul (fst p) (suc m')) (snd p)) x (fst inv)),
+                   (d', compPath Nat (add (suc (suc (snd p))) d') (suc (add (suc (snd p)) d')) (suc m')
+                          (prefl Nat (suc (add (suc (snd p)) d')))
+                          (compPath Nat (suc (add (suc (snd p)) d')) (add (suc (snd p)) (suc d')) (suc m')
+                             (sym Nat (add (suc (snd p)) (suc d')) (suc (add (suc (snd p)) d')) (add_suc_r (suc (snd p)) d'))
+                             hp)) ))
+    (fst (snd inv)) (snd (snd inv))
+
+-- the iteration, bundled with its invariant so the fold's own step can use the slack it carries
+def siterI : (m' x : Nat) -> Sigma (Sigma Nat (\_ -> Nat)) (SInv (suc m') x) :=
+  \m' x -> elim Nat (\x -> Sigma (Sigma Nat (\_ -> Nat)) (SInv (suc m') x))
+    ((0, 0), (prefl Nat 0, (m', prefl Nat (suc m'))))
+    (\k ih -> ( sstep m' (fst ih) (snd (snd ih)),
+                s_step_inv m' k (fst ih) (snd ih) ))
+    x
+def siter (m' x : Nat) : Sigma Nat (\_ -> Nat) := fst (siterI m' x)
+def siter_inv (m' x : Nat) : SInv (suc m') x (siter m' x) := snd (siterI m' x)
+-- the slack the iteration carries: the witness of its bound, and the divisor's own generator
+def siter_slack (m' x : Nat) : Nat := fst (snd (siter_inv m' x))
+def siter_le (m' x : Nat) : Le (suc (snd (siter m' x))) (suc m') := snd (siter_inv m' x)
