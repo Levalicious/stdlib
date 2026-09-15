@@ -317,3 +317,10 @@ def dm_q_le_one : (m' x : Nat) -> Le (suc x) (mul 2 (suc m')) -> Le (dm_q (suc m
 def le_one_absurd : (j : Nat) -> Le (suc (suc j)) 1 -> Empty :=
   \j h -> snotz (injSuc (snd h))
 
+-- the two's complement identity, the half where the difference is not negative: A + (m - B) = (A - B) + m
+def add_sub_ge : (m A B : Nat) -> Le B A -> Le B m -> Path Nat (add A (sub m B)) (add (sub A B) m) :=
+  \m A B hBA hBm -> compPath Nat (add A (sub m B)) (add (add (sub A B) B) (sub m B)) (add (sub A B) m)
+     (cong Nat Nat (\w -> add w (sub m B)) A (add (sub A B) B) (sym Nat (add (sub A B) B) A (sub_add_le A B hBA)))
+     (compPath Nat (add (add (sub A B) B) (sub m B)) (add (sub A B) (add B (sub m B))) (add (sub A B) m)
+        (add_assoc (sub A B) B (sub m B))
+        (cong Nat Nat (\w -> add (sub A B) w) (add B (sub m B)) m (compPath Nat (add B (sub m B)) (add (sub m B) B) m (add_comm B (sub m B)) (sub_add_le m B hBm))))
