@@ -172,3 +172,72 @@ def waddGo (x y : WB) : Sigma Word (\_ -> WB) :=
        (\b bs ihb -> (fst (wcol (fst (iha bs)) a b), lcons (snd (wcol (fst (iha bs)) a b)) (snd (iha bs))))
        y)
     x y
+
+-- ---- the fold's value law ----
+-- The base is a PARAMETER, not the literal: an inductive lemma applied at a literal is work proportional to
+-- that literal and the elaborator walks it (the tripwire names the definition when it does). M64 is an
+-- instance at the bottom, where nothing walks.
+def wpowK : Nat -> Nat -> Nat := \K -> elim Nat (\_ -> Nat) 1 (\_ ih -> mul ih K)
+def wpowK_suc : (K n : Nat) -> Path Nat (wpowK K (suc n)) (mul (wpowK K n) K) := \K n -> prefl Nat (mul (wpowK K n) K)
+def wlen : WB -> Nat := elim List (\_ -> Nat) 0 (\_ r ih -> suc ih)
+def wlen_cons : (l : Word) (r : WB) -> Path Nat (wlen (lcons l r)) (suc (wlen r)) := \l r -> prefl Nat (suc (wlen r))
+def wbvalAuxK (K : Nat) (acc : Nat) (x : WB) : Nat :=
+  elim List (\_ -> Nat -> Nat) (\acc -> acc) (\l rest ih -> \acc -> ih (add (mul acc K) (wlimb l))) x acc
+def mul_shuffle : (K acc l P : Nat) -> Path Nat (mul (add (mul acc K) l) P) (add (mul acc (mul P K)) (mul l P)) :=
+  \K acc l P -> compPath Nat
+    (mul (add (mul acc K) l) P)
+    (add (mul (mul acc K) P) (mul l P))
+    (add (mul acc (mul P K)) (mul l P))
+    (mul_dist_r (mul acc K) l P)
+    (cong Nat Nat (\w -> add w (mul l P))
+       (mul (mul acc K) P) (mul acc (mul P K))
+       (compPath Nat (mul (mul acc K) P) (mul acc (mul K P)) (mul acc (mul P K))
+          (mul_assoc acc K P)
+          (cong Nat Nat (\w -> mul acc w) (mul K P) (mul P K) (mul_comm K P))))
+-- wbvalAuxK K acc x = acc * K^len x + wbvalAuxK K 0 x
+def wbvalAuxK_val : (K : Nat) (x : WB) (acc : Nat)
+    -> Path Nat (wbvalAuxK K acc x) (add (mul acc (wpowK K (wlen x))) (wbvalAuxK K 0 x)) :=
+  \K x -> elim List (\x -> (acc : Nat) -> Path Nat (wbvalAuxK K acc x) (add (mul acc (wpowK K (wlen x))) (wbvalAuxK K 0 x)))
+    (\acc -> compPath Nat acc (mul acc 1) (add (mul acc 1) 0)
+       (sym Nat (mul acc 1) acc (mul_one_r acc))
+       (sym Nat (add (mul acc 1) 0) (mul acc 1) (add_zero_r (mul acc 1))))
+    (\l r ih -> \acc ->
+       compPath Nat
+         (wbvalAuxK K (add (mul acc K) (wlimb l)) r)
+         (add (add (mul acc (mul (wpowK K (wlen r)) K)) (mul (wlimb l) (wpowK K (wlen r)))) (wbvalAuxK K 0 r))
+         (add (mul acc (wpowK K (suc (wlen r)))) (wbvalAuxK K 0 (lcons l r)))
+         (compPath Nat
+            (wbvalAuxK K (add (mul acc K) (wlimb l)) r)
+            (add (mul (add (mul acc K) (wlimb l)) (wpowK K (wlen r))) (wbvalAuxK K 0 r))
+            (add (add (mul acc (mul (wpowK K (wlen r)) K)) (mul (wlimb l) (wpowK K (wlen r)))) (wbvalAuxK K 0 r))
+            (ih (add (mul acc K) (wlimb l)))
+            (cong Nat Nat (\w -> add w (wbvalAuxK K 0 r))
+               (mul (add (mul acc K) (wlimb l)) (wpowK K (wlen r)))
+               (add (mul acc (mul (wpowK K (wlen r)) K)) (mul (wlimb l) (wpowK K (wlen r))))
+               (mul_shuffle K acc (wlimb l) (wpowK K (wlen r)))))
+         (compPath Nat
+            (add (add (mul acc (mul (wpowK K (wlen r)) K)) (mul (wlimb l) (wpowK K (wlen r)))) (wbvalAuxK K 0 r))
+            (add (mul acc (wpowK K (suc (wlen r)))) (add (mul (wlimb l) (wpowK K (wlen r))) (wbvalAuxK K 0 r)))
+            (add (mul acc (wpowK K (suc (wlen r)))) (wbvalAuxK K 0 (lcons l r)))
+            (compPath Nat
+               (add (add (mul acc (mul (wpowK K (wlen r)) K)) (mul (wlimb l) (wpowK K (wlen r)))) (wbvalAuxK K 0 r))
+               (add (mul acc (mul (wpowK K (wlen r)) K)) (add (mul (wlimb l) (wpowK K (wlen r))) (wbvalAuxK K 0 r)))
+               (add (mul acc (wpowK K (suc (wlen r)))) (add (mul (wlimb l) (wpowK K (wlen r))) (wbvalAuxK K 0 r)))
+               (add_assoc (mul acc (mul (wpowK K (wlen r)) K)) (mul (wlimb l) (wpowK K (wlen r))) (wbvalAuxK K 0 r))
+               (cong Nat Nat (\w -> add w (add (mul (wlimb l) (wpowK K (wlen r))) (wbvalAuxK K 0 r)))
+                  (mul acc (mul (wpowK K (wlen r)) K)) (mul acc (wpowK K (suc (wlen r))))
+                  (sym Nat (mul acc (wpowK K (suc (wlen r)))) (mul acc (mul (wpowK K (wlen r)) K))
+                     (cong Nat Nat (\w -> mul acc w) (wpowK K (suc (wlen r))) (mul (wpowK K (wlen r)) K) (wpowK_suc K (wlen r))))))
+            (cong Nat Nat (\w -> add (mul acc (wpowK K (suc (wlen r)))) w)
+               (add (mul (wlimb l) (wpowK K (wlen r))) (wbvalAuxK K 0 r))
+               (wbvalAuxK K 0 (lcons l r))
+               (sym Nat (wbvalAuxK K 0 (lcons l r)) (add (mul (wlimb l) (wpowK K (wlen r))) (wbvalAuxK K 0 r))
+                  (ih (wlimb l))))))
+    x
+
+-- at the machine base: wbvalAux and wbval ARE wbvalAuxK M64, so the law instantiates by conversion
+def wpow : Nat -> Nat := \n -> wpowK M64 n
+def wbvalAux_val : (x : WB) (acc : Nat) -> Path Nat (wbvalAux acc x) (add (mul acc (wpow (wlen x))) (wbval x)) :=
+  \x acc -> wbvalAuxK_val M64 x acc
+def wbval_cons : (l : Word) (r : WB) -> Path Nat (wbval (lcons l r)) (add (mul (wlimb l) (wpow (wlen r))) (wbval r)) :=
+  \l r -> wbvalAuxK_val M64 r (wlimb l)
