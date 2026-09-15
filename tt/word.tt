@@ -662,7 +662,7 @@ def wltGoN (x y : WB) : Nat :=
     (\y -> 0)
     (\a as iha -> \y -> elim List (\_ -> Nat)
        (0)
-       (\b bs ihb -> if01 (ble (suc (wlimb a)) (wlimb b)) 1 (if01 (ble (suc (wlimb b)) (wlimb a)) 0 ihb))
+       (\b bs ihb -> if01 (ble (suc (wlimb a)) (wlimb b)) 1 (if01 (ble (suc (wlimb b)) (wlimb a)) 0 (iha bs)))
        y)
     x y
 def wltGo (x y : WB) : Bool := n2b (wltGoN x y)
@@ -712,3 +712,58 @@ def wltGoN_step : (a' b' P A B : Nat) -> (hA : Lt A P) -> (hB : Lt B P)
              (blt_cancel_add (mul b' P) A B)
              (cong Nat Nat (\w -> blt (add (mul w P) A) (add (mul b' P) B)) b' a'
                 (sym Nat a' b' (le_antisym a' b' (le_suc_suc a' b' (ble_not (suc b') a' h20)) (le_suc_suc b' a' (ble_not (suc a') b' h0))))))))
+
+-- ---- the comparison scan's law ----
+-- The step at the limb level rewrites the branches to the tails' own comparison and the heads to their weights, and
+-- the induction is the same shape as the fold's: the lnil cases are the ones the length hypothesis rules out.
+-- NOTE for whoever writes the next scan: the step applies the OUTER induction hypothesis (iha bs, as the fold's own
+-- step does) rather than the inner eliminator's ihb. A lazy induction hypothesis is convertible with the recursive
+-- call only once applied, so a step that uses its inner ihb bare does not unfold to the same thing.
+def wltGoN_step_wb : (a b : Word) (as bs : WB)
+    -> Path Nat (wpow (wlen bs)) (wpow (wlen as))
+    -> Path Nat (wltGoN as bs) (blt (wbval as) (wbval bs))
+    -> Path Nat (wltGoN (lcons a as) (lcons b bs)) (blt (wbval (lcons a as)) (wbval (lcons b bs))) :=
+  \a b as bs hPQ ihv ->
+  let a' : Nat := wlimb a in
+  let b' : Nat := wlimb b in
+  let P : Nat := wpow (wlen as) in
+  let A : Nat := wbval as in
+  let B : Nat := wbval bs in
+  let Lg : Nat := if01 (ble (suc a') b') 1 (if01 (ble (suc b') a') 0 (blt A B)) in
+  let Rg : Nat := blt (add (mul a' P) A) (add (mul b' P) B) in
+  let hR : Path Nat Rg (blt (wbval (lcons a as)) (wbval (lcons b bs))) :=
+     compPath Nat Rg
+        (blt (add (mul a' P) A) (add (mul b' (wpow (wlen bs))) B))
+        (blt (wbval (lcons a as)) (wbval (lcons b bs)))
+        (cong Nat Nat (\w -> blt (add (mul a' P) A) (add (mul b' w) B)) P (wpow (wlen bs)) (sym Nat (wpow (wlen bs)) P hPQ))
+        (compPath Nat
+           (blt (add (mul a' P) A) (add (mul b' (wpow (wlen bs))) B))
+           (blt (add (mul a' P) A) (wbval (lcons b bs)))
+           (blt (wbval (lcons a as)) (wbval (lcons b bs)))
+           (cong Nat Nat (\w -> blt (add (mul a' P) A) w) (add (mul b' (wpow (wlen bs))) B) (wbval (lcons b bs))
+              (sym Nat (wbval (lcons b bs)) (add (mul (wlimb b) (wpow (wlen bs))) (wbval bs)) (wbval_cons b bs)))
+           (cong Nat Nat (\w -> blt w (wbval (lcons b bs))) (add (mul a' P) A) (wbval (lcons a as))
+              (sym Nat (wbval (lcons a as)) (add (mul (wlimb a) (wpow (wlen as))) (wbval as)) (wbval_cons a as)))) in
+  compPath Nat
+    (wltGoN (lcons a as) (lcons b bs))
+    Lg
+    (blt (wbval (lcons a as)) (wbval (lcons b bs)))
+    (cong Nat Nat (\w -> if01 (ble (suc a') b') 1 (if01 (ble (suc b') a') 0 w)) (wltGoN as bs) (blt A B) ihv)
+    (compPath Nat Lg Rg (blt (wbval (lcons a as)) (wbval (lcons b bs)))
+       (wltGoN_step a' b' P A B (wbval_lt_wpow as) (lt_rewrite (wbval bs) (wbval bs) (wpow (wlen bs)) (wpow (wlen as)) (prefl Nat (wbval bs)) hPQ (wbval_lt_wpow bs)))
+       hR)
+-- the scan's law: equal lengths in, and the limbs' comparison is blt of the values
+def wltGo_val : (x y : WB) -> Path Nat (wlen x) (wlen y) -> Path Nat (wltGoN x y) (blt (wbval x) (wbval y)) :=
+  \x -> elim List (\x -> (y : WB) -> Path Nat (wlen x) (wlen y) -> Path Nat (wltGoN x y) (blt (wbval x) (wbval y)))
+    (\y -> elim List (\y -> Path Nat (wlen (lnil {Word})) (wlen y) -> Path Nat (wltGoN (lnil {Word}) y) (blt (wbval (lnil {Word})) (wbval y)))
+       (\h -> prefl Nat 0)
+       (\b bs _ h -> elim Empty (\_ -> Path Nat (wltGoN (lnil {Word}) (lcons b bs)) (blt (wbval (lnil {Word})) (wbval (lcons b bs)))) (znots h))
+       y)
+    (\a as iha -> \y -> elim List
+       (\y -> Path Nat (wlen (lcons a as)) (wlen y) -> Path Nat (wltGoN (lcons a as) y) (blt (wbval (lcons a as)) (wbval y)))
+       (\h -> elim Empty (\_ -> Path Nat (wltGoN (lcons a as) (lnil {Word})) (blt (wbval (lcons a as)) (wbval (lnil {Word})))) (snotz h))
+       (\b bs ihb h -> wltGoN_step_wb a b as bs
+          (cong Nat Nat wpow (wlen bs) (wlen as) (sym Nat (wlen as) (wlen bs) (injSuc h)))
+          (iha bs (injSuc h)))
+       y)
+    x
