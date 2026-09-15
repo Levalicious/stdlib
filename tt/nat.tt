@@ -40,9 +40,6 @@ def mul_dist_l : (a b c : Nat) -> Path Nat (mul a (add b c)) (add (mul a b) (mul
                     (cong Nat Nat (\x -> add (mul a b) x) (mul c a) (mul a c) (mul_comm c a))))
 
 -- the decidable order: ble r m = 1 and ble (suc r) m = 0 force r = m (the only fact the remainder's bound needs)
-def idToPath {A : U} {a b : A} (p : Id A a b) : Path A a b := substId (\y -> Path A a y) p (prefl A a)
-def pathToId {A : U} {a b : A} (p : Path A a b) : Id A a b := transp (\i -> Id A a (p i)) i0 refl
-def zeroNotOne .(e : Id Nat 0 1) : Empty := znots (idToPath e)
 def le_lt_eq : (r m : Nat) -> .(h1 : Id Nat (ble r m) 1) -> .(h2 : Id Nat (ble (suc r) m) 0) -> Path Nat r m :=
   \r -> elim Nat (\r -> (m : Nat) -> .(h1 : Id Nat (ble r m) 1) -> .(h2 : Id Nat (ble (suc r) m) 0) -> Path Nat r m)
           (\m -> elim Nat (\m -> .(h1 : Id Nat (ble 0 m) 1) -> .(h2 : Id Nat (ble 1 m) 0) -> Path Nat 0 m)
@@ -60,14 +57,6 @@ def dm_q : Nat -> Nat -> Nat := \m x -> fst (dmiter m x)
 def dm_r : Nat -> Nat -> Nat := \m x -> snd (dmiter m x)
 def DmInv : (m x : Nat) -> Sigma Nat (\_ -> Nat) -> U :=
   \m x p -> Sigma (Path Nat (add (mul (fst p) m) (snd p)) x) (\_ -> Id Nat (blt (snd p) m) 1)
-def ble_ones : (a b k : Nat) -> .(e : Id Nat (ble a b) (suc k)) -> Id Nat (ble a b) 1 :=
-  \a -> elim Nat (\a -> (b k : Nat) -> .(e : Id Nat (ble a b) (suc k)) -> Id Nat (ble a b) 1)
-          (\b k _ -> refl)
-          (\a' ih b -> elim Nat (\b -> (k : Nat) -> .(e : Id Nat (ble (suc a') b) (suc k)) -> Id Nat (ble (suc a') b) 1)
-                         (\k e -> elim Empty (\_ -> Id Nat 0 1) (znots (idToPath e)))
-                         (\b' _ k e -> ih b' k e)
-                         b)
-          a
 def blt_ones : (a b k : Nat) -> .(e : Id Nat (blt a b) (suc k)) -> Id Nat (blt a b) 1 := \a b k e -> ble_ones (suc a) b k e
 def dm_step_inv : (m' x : Nat) (p : Sigma Nat (\_ -> Nat)) -> DmInv (suc m') x p -> DmInv (suc m') (suc x) (dmstep (suc m') p) :=
   \m' x p inv -> elim Nat (\c -> Id Nat c (blt (suc (snd p)) (suc m')) -> DmInv (suc m') (suc x) (ifN c (fst p, suc (snd p)) (suc (fst p), 0)))
@@ -132,25 +121,6 @@ def lt_add_absurd : (m x : Nat) -> Le (suc (add m x)) m -> Empty :=
        (sym Nat (add m 0) m (add_zero_r m))))
 
 -- the decidable order agrees with the witnessed one
-def ble_le : (a b : Nat) -> .(e : Id Nat (ble a b) 1) -> Le a b :=
-  \a -> elim Nat (\a -> (b : Nat) -> .(e : Id Nat (ble a b) 1) -> Le a b)
-         (\b _ -> (b, prefl Nat b))
-         (\a' ih b -> elim Nat (\b -> .(e : Id Nat (ble (suc a') b) 1) -> Le (suc a') b)
-                        (\e -> elim Empty (\_ -> Le (suc a') 0) (zeroNotOne e))
-                        (\b' _ e -> (fst (ih b' e), cong Nat Nat suc (add a' (fst (ih b' e))) b' (snd (ih b' e))))
-                        b)
-         a
-def le_ble : (a b : Nat) -> Le a b -> Id Nat (ble a b) 1 :=
-  \a -> elim Nat (\a -> (b : Nat) -> Le a b -> Id Nat (ble a b) 1)
-         (\b _ -> refl)
-         (\a' ih b -> elim Nat (\b -> Le (suc a') b -> Id Nat (ble (suc a') b) 1)
-                        (\p -> elim Empty (\_ -> Id Nat 0 1) (snotz (snd p)))
-                        (\b' _ p -> ih b' (fst p, injSuc (snd p)))
-                        b)
-         a
-def lt_le : (a b : Nat) -> .(h : Lt a b) -> Le (suc a) b := \a b h -> ble_le (suc a) b h
-def le_lt : (a b : Nat) -> Le (suc a) b -> Lt a b := \a b p -> le_ble (suc a) b p
-
 -- quotient and remainder are unique: q*m + r = q'*m + r' with r, r' < m forces q = q' and r = r' (m = suc m')
 def dm_eq : (m' q q' r r' : Nat) -> Path Nat (add (mul q (suc m')) r) (add (mul q' (suc m')) r') -> .(hr : Lt r (suc m')) -> .(hr' : Lt r' (suc m')) ->
             Sigma (Path Nat q q') (\_ -> Path Nat r r') :=
