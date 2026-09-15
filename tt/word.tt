@@ -237,6 +237,7 @@ def wbvalAuxK_val : (K : Nat) (x : WB) (acc : Nat)
 
 -- at the machine base: wbvalAux and wbval ARE wbvalAuxK M64, so the law instantiates by conversion
 def wpow : Nat -> Nat := \n -> wpowK M64 n
+def wpow_suc : (n : Nat) -> Path Nat (wpow (suc n)) (mul (wpow n) M64) := \n -> wpowK_suc M64 n
 def wbvalAux_val : (x : WB) (acc : Nat) -> Path Nat (wbvalAux acc x) (add (mul acc (wpow (wlen x))) (wbval x)) :=
   \x acc -> wbvalAuxK_val M64 x acc
 def wbval_cons : (l : Word) (r : WB) -> Path Nat (wbval (lcons l r)) (add (mul (wlimb l) (wpow (wlen r))) (wbval r)) :=
@@ -398,3 +399,161 @@ def col_bound : (a b c : Word) -> Le (wlimb c) 1 -> Le (suc (add (add (fst a) (f
      (cong Nat Nat suc (add A (add B C)) (add (add A B) C) (sym Nat (add (add A B) C) (add A (add B C)) (add_assoc A B C)))
      (mul_two M64)
      hsum
+
+-- ---- the fold's value law ----
+-- The step, in pieces: the result's value at a column and a tail (wstep_lhs), the middle - two head weights, the
+-- column times V, and the IH's relation (fold_step_mid, pure arithmetic on Nat) - and the two heads' weight rewrite
+-- with the cons law (wstep_rhs). wstep_val assembles them around the column law and the IH, and waddGo_val is the
+-- induction: the limbs pair off, the lnil cases are the ones the length hypothesis rules out, and the carry out of
+-- each column is at most one, which is what lets the next column take it as its carry in.
+def wstep_lhs : (z : WB) (d co : Word)
+    -> Path Nat (add (wbval (lcons d z)) (mul (wlimb co) (wpow (wlen (lcons d z)))))
+               (add (add (mul (wlimb d) (wpow (wlen z))) (wbval z)) (mul (wlimb co) (mul (wpow (wlen z)) M64))) :=
+  \z d co -> compPath Nat
+    (add (wbval (lcons d z)) (mul (wlimb co) (wpow (wlen (lcons d z)))))
+    (add (add (mul (wlimb d) (wpow (wlen z))) (wbval z)) (mul (wlimb co) (wpow (wlen (lcons d z)))))
+    (add (add (mul (wlimb d) (wpow (wlen z))) (wbval z)) (mul (wlimb co) (mul (wpow (wlen z)) M64)))
+    (cong Nat Nat (\w -> add w (mul (wlimb co) (wpow (wlen (lcons d z))))) (wbval (lcons d z)) (add (mul (wlimb d) (wpow (wlen z))) (wbval z)) (wbval_cons d z))
+    (cong Nat Nat (\w -> add (add (mul (wlimb d) (wpow (wlen z))) (wbval z)) (mul (wlimb co) w)) (wpow (wlen (lcons d z))) (mul (wpow (wlen z)) M64) (wpow_suc (wlen z)))
+def fold_step_mid : (A1 B1 X UA UB W CV D1 C1 : Nat)
+    -> Path Nat X (add A1 B1)
+    -> Path Nat (add X CV) (add D1 C1)
+    -> Path Nat (add W CV) (add UA UB)
+    -> Path Nat (add (add D1 W) C1) (add (add A1 UA) (add B1 UB)) :=
+  \A1 B1 X UA UB W CV D1 C1 hX hcol ih -> compPath Nat
+    (add (add D1 W) C1)
+    (add W (add X CV))
+    (add (add A1 UA) (add B1 UB))
+    (compPath Nat
+       (add (add D1 W) C1)
+       (add D1 (add W C1))
+       (add W (add X CV))
+       (add_assoc D1 W C1)
+       (compPath Nat
+          (add D1 (add W C1))
+          (add W (add D1 C1))
+          (add W (add X CV))
+          (add_swap D1 W C1)
+          (cong Nat Nat (\w -> add W w) (add D1 C1) (add X CV) (sym Nat (add X CV) (add D1 C1) hcol))))
+    (compPath Nat
+       (add W (add X CV))
+       (add X (add W CV))
+       (add (add A1 UA) (add B1 UB))
+       (add_swap W X CV)
+       (compPath Nat
+          (add X (add W CV))
+          (add X (add UA UB))
+          (add (add A1 UA) (add B1 UB))
+          (cong Nat Nat (\w -> add X w) (add W CV) (add UA UB) ih)
+          (compPath Nat
+             (add X (add UA UB))
+             (add (add A1 B1) (add UA UB))
+             (add (add A1 UA) (add B1 UB))
+             (cong Nat Nat (\w -> add w (add UA UB)) X (add A1 B1) hX)
+             (add_interchange A1 B1 UA UB))))
+def wstep_rhs : (a b : Word) (as bs : WB) (V : Nat)
+    -> Path Nat V (wpow (wlen as)) -> Path Nat V (wpow (wlen bs))
+    -> Path Nat (add (add (mul (wlimb a) V) (wbval as)) (add (mul (wlimb b) V) (wbval bs)))
+               (add (wbval (lcons a as)) (wbval (lcons b bs))) :=
+  \a b as bs V hVP hVQ ->
+  let P : Nat := wpow (wlen as) in
+  let Q : Nat := wpow (wlen bs) in
+  compPath Nat
+    (add (add (mul (wlimb a) V) (wbval as)) (add (mul (wlimb b) V) (wbval bs)))
+    (add (add (mul (wlimb a) P) (wbval as)) (add (mul (wlimb b) Q) (wbval bs)))
+    (add (wbval (lcons a as)) (wbval (lcons b bs)))
+    (compPath Nat
+       (add (add (mul (wlimb a) V) (wbval as)) (add (mul (wlimb b) V) (wbval bs)))
+       (add (add (mul (wlimb a) P) (wbval as)) (add (mul (wlimb b) V) (wbval bs)))
+       (add (add (mul (wlimb a) P) (wbval as)) (add (mul (wlimb b) Q) (wbval bs)))
+       (cong Nat Nat (\w -> add (add w (wbval as)) (add (mul (wlimb b) V) (wbval bs))) (mul (wlimb a) V) (mul (wlimb a) P)
+          (cong Nat Nat (\v -> mul (wlimb a) v) V P hVP))
+       (cong Nat Nat (\w -> add (add (mul (wlimb a) P) (wbval as)) (add w (wbval bs))) (mul (wlimb b) V) (mul (wlimb b) Q)
+          (cong Nat Nat (\v -> mul (wlimb b) v) V Q hVQ)))
+    (compPath Nat
+       (add (add (mul (wlimb a) P) (wbval as)) (add (mul (wlimb b) Q) (wbval bs)))
+       (add (wbval (lcons a as)) (add (mul (wlimb b) Q) (wbval bs)))
+       (add (wbval (lcons a as)) (wbval (lcons b bs)))
+       (cong Nat Nat (\w -> add w (add (mul (wlimb b) Q) (wbval bs))) (add (mul (wlimb a) P) (wbval as)) (wbval (lcons a as))
+          (sym Nat (wbval (lcons a as)) (add (mul (wlimb a) P) (wbval as)) (wbval_cons a as)))
+       (cong Nat Nat (\w -> add (wbval (lcons a as)) w) (add (mul (wlimb b) Q) (wbval bs)) (wbval (lcons b bs))
+          (sym Nat (wbval (lcons b bs)) (add (mul (wlimb b) Q) (wbval bs)) (wbval_cons b bs))))
+
+-- the step's value law, assembled: the result's value at the head column, the column law times V, and the IH
+def wstep_val : (a b : Word) (as bs : WB) (r : Sigma Word (\_ -> WB))
+    -> Le (wlimb (fst r)) 1
+    -> Path Nat (wlen as) (wlen bs)
+    -> Path Nat (wlen (snd r)) (wlen as)
+    -> Path Nat (add (wbval (snd r)) (mul (wlimb (fst r)) (wpow (wlen (snd r))))) (add (wbval as) (wbval bs))
+    -> Path Nat (add (wbval (lcons (snd (wcol (fst r) a b)) (snd r))) (mul (wlimb (fst (wcol (fst r) a b))) (wpow (wlen (lcons (snd (wcol (fst r) a b)) (snd r))))))
+               (add (wbval (lcons a as)) (wbval (lcons b bs))) :=
+  \a b as bs r hcarry hlen hL ihval ->
+  let c : Nat := wlimb (fst r) in
+  let z : WB := snd r in
+  let V : Nat := wpow (wlen z) in
+  let hPV : Path Nat V (wpow (wlen as)) := cong Nat Nat wpow (wlen z) (wlen as) hL in
+  let hVQ : Path Nat V (wpow (wlen bs)) :=
+     compPath Nat V (wpow (wlen as)) (wpow (wlen bs)) hPV (cong Nat Nat wpow (wlen as) (wlen bs) hlen) in
+  let d : Word := snd (wcol (fst r) a b) in
+  let co : Word := fst (wcol (fst r) a b) in
+  let A1 : Nat := mul (wlimb a) V in
+  let B1 : Nat := mul (wlimb b) V in
+  let D1 : Nat := mul (wlimb d) V in
+  let C1 : Nat := mul (wlimb co) (mul V M64) in
+  let W : Nat := wbval z in
+  let UA : Nat := wbval as in
+  let UB : Nat := wbval bs in
+  let CV : Nat := mul c V in
+  let X : Nat := mul (add (wlimb a) (wlimb b)) V in
+  let hX : Path Nat X (add A1 B1) := mul_dist_r (wlimb a) (wlimb b) V in
+  let hwcol : Path Nat (mul (add (wlimb d) (mul (wlimb co) M64)) V) (add D1 C1) :=
+    compPath Nat (mul (add (wlimb d) (mul (wlimb co) M64)) V) (add (mul (wlimb d) V) (mul (mul (wlimb co) M64) V)) (add D1 C1)
+      (mul_dist_r (wlimb d) (mul (wlimb co) M64) V)
+      (cong Nat Nat (\w -> add D1 w) (mul (mul (wlimb co) M64) V) C1
+         (compPath Nat (mul (mul (wlimb co) M64) V) (mul (wlimb co) (mul M64 V)) (mul (wlimb co) (mul V M64))
+            (mul_assoc (wlimb co) M64 V)
+            (cong Nat Nat (\w -> mul (wlimb co) w) (mul M64 V) (mul V M64) (mul_comm M64 V)))) in
+  let hXCV : Path Nat (add X CV) (add D1 C1) :=
+    compPath Nat (add X CV) (mul (add (add (wlimb a) (wlimb b)) c) V) (add D1 C1)
+      (sym Nat (mul (add (add (wlimb a) (wlimb b)) c) V) (add (mul (add (wlimb a) (wlimb b)) V) (mul c V))
+         (mul_dist_r (add (wlimb a) (wlimb b)) c V))
+      (compPath Nat (mul (add (add (wlimb a) (wlimb b)) c) V) (mul (add (wlimb d) (mul (wlimb co) M64)) V) (add D1 C1)
+         (cong Nat Nat (\w -> mul w V) (add (add (wlimb a) (wlimb b)) c) (add (wlimb d) (mul (wlimb co) M64))
+            (sym Nat (add (wlimb d) (mul (wlimb co) M64)) (add (add (wlimb a) (wlimb b)) c)
+               (wcol_val (fst r) a b (col_bound a b (fst r) hcarry))))
+         hwcol) in
+  compPath Nat
+    (add (wbval (lcons d z)) (mul (wlimb co) (wpow (wlen (lcons d z)))))
+    (add (add A1 UA) (add B1 UB))
+    (add (wbval (lcons a as)) (wbval (lcons b bs)))
+    (compPath Nat
+       (add (wbval (lcons d z)) (mul (wlimb co) (wpow (wlen (lcons d z)))))
+       (add (add D1 W) C1)
+       (add (add A1 UA) (add B1 UB))
+       (wstep_lhs z d co)
+       (fold_step_mid A1 B1 X UA UB W CV D1 C1 hX hXCV ihval))
+    (wstep_rhs a b as bs V hPV hVQ)
+
+-- what the fold is worth, bundled: the value, the carry out, and the length of the result
+def WInv (x y : WB) : U :=
+  Sigma (Path Nat (add (wbval (snd (waddGo x y))) (mul (wlimb (fst (waddGo x y))) (wpow (wlen (snd (waddGo x y)))))) (add (wbval x) (wbval y)))
+    (\_ -> Sigma (Le (wlimb (fst (waddGo x y))) 1) (\_ -> Path Nat (wlen (snd (waddGo x y))) (wlen x)))
+-- the fold's value law: equal lengths in, and the limbs' digits reconstruct the sum
+def waddGo_val : (x y : WB) -> Path Nat (wlen x) (wlen y) -> WInv x y :=
+  \x -> elim List (\x -> (y : WB) -> Path Nat (wlen x) (wlen y) -> WInv x y)
+    (\y -> elim List (\y -> Path Nat (wlen (lnil {Word})) (wlen y) -> WInv (lnil {Word}) y)
+       (\h -> (prefl Nat 0, ((1, prefl Nat 1), prefl Nat 0)))
+       (\b bs ihb h -> elim Empty (\_ -> WInv (lnil {Word}) (lcons b bs)) (znots h))
+       y)
+    (\a as iha -> \y -> elim List (\y -> Path Nat (wlen (lcons a as)) (wlen y) -> WInv (lcons a as) y)
+       (\h -> elim Empty (\_ -> WInv (lcons a as) (lnil {Word})) (snotz h))
+       (\b bs ihb h ->
+          let hs : Path Nat (wlen as) (wlen bs) := injSuc h in
+          let r : Sigma Word (\_ -> WB) := waddGo as bs in
+          let ihv : WInv as bs := iha bs hs in
+          let hcarry : Le (wlimb (fst r)) 1 := fst (snd ihv) in
+          ( wstep_val a b as bs r hcarry hs (snd (snd ihv)) (fst ihv),
+            ( wcol_carry_le (fst r) a b (col_bound a b (fst r) hcarry),
+              cong Nat Nat suc (wlen (snd r)) (wlen as) (snd (snd ihv)) ) ))
+       y)
+    x
