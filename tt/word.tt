@@ -116,3 +116,16 @@ def wmul_dist_r : (a b c : Word) -> Path Word (wmul (wadd a b) c) (wadd (wmul a 
         (compPath Word (wadd (wmul c a) (wmul c b)) (wadd (wmul a c) (wmul c b)) (wadd (wmul a c) (wmul b c))
            (cong Word Word (\w -> wadd w (wmul c b)) (wmul c a) (wmul a c) (wmul_comm c a))
            (cong Word Word (\w -> wadd (wmul a c) w) (wmul c b) (wmul b c) (wmul_comm c b))))
+
+-- mod of a number that is at most one is that number: the wrap a word column needs, and cheap because the decision
+-- comes from the bound rather than from inverting a computation. add (suc k) d reduces to suc (add k d) on its own,
+-- so injSuc plus add_zero_both give k = 0 with no case split over the witness at all.
+def mod_le_one : (q : Nat) -> Le q 1 -> Path Nat (mod q M64) q :=
+  \q -> elim Nat (\q -> Le q 1 -> Path Nat (mod q M64) q)
+    (\_ -> prefl Nat 0)
+    (\k ih h -> compPath Nat (mod (suc k) M64) (mod 1 M64) (suc k)
+       (cong Nat Nat (\w -> mod w M64) (suc k) 1 (cong Nat Nat suc k 0 (add_zero_both k (fst h) (injSuc (snd h)))))
+       (compPath Nat (mod 1 M64) 1 (suc k)
+          (prefl Nat 1)
+          (sym Nat (suc k) 1 (cong Nat Nat suc k 0 (add_zero_both k (fst h) (injSuc (snd h)))))))
+    q
