@@ -627,3 +627,42 @@ def cmp_eq_lt : (a b V A B : Nat) -> Path Nat a b -> Lt A V -> Lt B V
         (prefl Nat (add (mul a V) A))
         (sym Nat (add (mul a V) B) (add (mul b V) B) (cong Nat Nat (\w -> add (mul w V) B) a b h))
         hs)
+
+-- ---- the comparison scan ----
+-- A decision has two values, so ble_cases splits on it by the structure ble's own definition recurses on: that is
+-- the case analysis a decision-valued proof needs, and it is structural rather than a walk. ble_not and ble_zero_not
+-- are the two readings of a zero - the value that is NOT one - and lt_asym is what makes the scan's third case
+-- (the head is greater) a zero. The scan itself is wltGoN, and wltGo is its Bool face; the law tying them to
+-- blt of the values is what makes them a comparison.
+-- decisions have two values: split on ble by the structure its own definition recurses on
+def ble_cases : (x y : Nat) -> (P : U) -> (Id Nat (ble x y) 1 -> P) -> (Id Nat (ble x y) 0 -> P) -> P :=
+  \x -> elim Nat (\x -> (y : Nat) -> (P : U) -> (Id Nat (ble x y) 1 -> P) -> (Id Nat (ble x y) 0 -> P) -> P)
+    (\y P h1 h0 -> h1 (refl))
+    (\k ih -> \y -> elim Nat
+       (\y -> (P : U) -> (Id Nat (ble (suc k) y) 1 -> P) -> (Id Nat (ble (suc k) y) 0 -> P) -> P)
+       (\P h1 h0 -> h0 (refl))
+       (\n _ -> \P h1 h0 -> ih n P h1 h0)
+       y)
+    x
+def ble_zero_not : (x y : Nat) -> Id Nat (ble x y) 0 -> Le x y -> Empty :=
+  \x y h0 hle -> zeroNotOne (pathToId (compPath Nat 0 (ble x y) 1 (sym Nat (ble x y) 0 h0) (le_ble x y hle)))
+def ble_not : (x y : Nat) -> Id Nat (ble x y) 0 -> Le (suc y) x :=
+  \x -> elim Nat (\x -> (y : Nat) -> Id Nat (ble x y) 0 -> Le (suc y) x)
+    (\y h -> elim Empty (\_ -> Le (suc y) 0) (zeroNotOne (pathToId (compPath Nat 0 (ble 0 y) 1 (sym Nat (ble 0 y) 0 h) (prefl Nat 1)))))
+    (\k ih -> \y h -> elim Nat (\y -> Id Nat (ble (suc k) y) 0 -> Le (suc y) (suc k))
+       (\_ -> (k, prefl Nat (suc k)))
+       (\n _ -> \h -> le_suc_both (suc n) k (ih n h))
+       y h)
+    x
+def lt_asym : (a b : Nat) -> .(h1 : Lt a b) -> .(h2 : Lt b a) -> Empty :=
+  \a b h1 h2 -> lt_self_absurd a
+     (le_trans (suc a) b a (lt_le a b h1) (le_of_le_suc b a (lt_le b a h2)))
+def wltGoN (x y : WB) : Nat :=
+  elim List (\_ -> WB -> Nat)
+    (\y -> 0)
+    (\a as iha -> \y -> elim List (\_ -> Nat)
+       (0)
+       (\b bs ihb -> if01 (blt (wlimb a) (wlimb b)) 1 (if01 (beq (wlimb a) (wlimb b)) ihb 0))
+       y)
+    x y
+def wltGo (x y : WB) : Bool := n2b (wltGoN x y)
