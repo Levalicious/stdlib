@@ -590,3 +590,40 @@ def wbval_lt_wpow : (x : WB) -> Lt (wbval x) (wpow (wlen x)) :=
                 (mul_comm M64 (wpow (wlen as)))
                 (le_mul_r (suc (wlimb a)) M64 (wpow (wlen as)) (lt_le (wlimb a) M64 (snd a))))))
     x
+
+-- ---- the comparison scan's head lemmas ----
+-- A head limb decides on its own when it is strictly smaller - its weight alone already exceeds the other side,
+-- whatever the tails are - and when the heads are equal the two weights cancel and the tails decide. Together these
+-- are the recursion step: read the two heads, and only if they agree does the decision pass down.
+def cmp_head_lt : (a b V A B : Nat) -> .(h : Lt a b) -> Lt A V -> Lt (add (mul a V) A) (add (mul b V) B) :=
+  \a b V A B h hA ->
+  lt_le_trans (add (mul a V) A) (mul b V) (add (mul b V) B)
+     (lt_le_trans (add (mul a V) A) (add (mul a V) V) (mul b V)
+        (lt_add_mono_l A V (mul a V) hA)
+        (le_rewrite (mul (suc a) V) (add (mul a V) V) (mul b V) (mul b V)
+           (compPath Nat (mul (suc a) V) (add V (mul a V)) (add (mul a V) V)
+              (prefl Nat (add V (mul a V))) (add_comm V (mul a V)))
+           (prefl Nat (mul b V))
+           (le_mul_r (suc a) b V (lt_le a b h))))
+     (B, prefl Nat (add (mul b V) B))
+def lt_cancel_add : (X A B : Nat) -> Lt (add X A) (add X B) -> Lt A B :=
+  \X A B h ->
+  let hl : Le (suc (add X A)) (add X B) := lt_le (add X A) (add X B) h in
+  let d : Nat := fst hl in
+  le_lt A B (d,
+    compPath Nat (add (suc A) d) (suc (add A d)) B
+       (prefl Nat (suc (add A d)))
+       (add_cancel_l X (suc (add A d)) B
+          (compPath Nat (add X (suc (add A d))) (suc (add X (add A d))) (add X B)
+             (add_suc_r X (add A d))
+             (compPath Nat (suc (add X (add A d))) (suc (add (add X A) d)) (add X B)
+                (cong Nat Nat suc (add X (add A d)) (add (add X A) d) (sym Nat (add (add X A) d) (add X (add A d)) (add_assoc X A d)))
+                (snd hl)))))
+def cmp_eq_lt : (a b V A B : Nat) -> Path Nat a b -> Lt A V -> Lt B V
+    -> Lt (add (mul a V) A) (add (mul b V) B) -> Lt A B :=
+  \a b V A B h hA hB hs ->
+  lt_cancel_add (mul a V) A B
+     (lt_rewrite (add (mul a V) A) (add (mul a V) A) (add (mul b V) B) (add (mul a V) B)
+        (prefl Nat (add (mul a V) A))
+        (sym Nat (add (mul a V) B) (add (mul b V) B) (cong Nat Nat (\w -> add (mul w V) B) a b h))
+        hs)
