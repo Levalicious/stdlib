@@ -360,3 +360,41 @@ def wcol_carry_le : (c a b : Word) -> Le (suc (add (add (fst a) (fst b)) (fst c)
   substId (\y -> Le y 1)
     (pathToId (sym Nat (mod (add c1 c2) M64) (add c1 c2) (mod_le_one (add c1 c2) carry_le)))
     carry_le
+
+-- ---- the fold's value law: the bound arithmetic its step needs ----
+-- A bound is a Sigma, so moving one along a path means rebuilding the witness (le_rewrite). The column's total fits
+-- a word plus a carry given the limbs' own bounds and the carry in at most one - and that is what the fold's step
+-- supplies to wcol_val, which is why wcol_val can take its size bound as a hypothesis.
+def le_rewrite : (X X' Y Y' : Nat) -> Path Nat X X' -> Path Nat Y Y' -> Le X Y -> Le X' Y' :=
+  \X X' Y Y' p q h -> substId (\z -> Le X' z) (pathToId q)
+      (substId (\z -> Le z Y) (pathToId p) h)
+def add_one_r : (x : Nat) -> Path Nat (add x 1) (suc x) :=
+  \x -> compPath Nat (add x 1) (suc (add x 0)) (suc x) (add_suc_r x 0) (cong Nat Nat suc (add x 0) x (add_zero_r x))
+def le_add_le : (a b c d : Nat) -> Le a b -> Le c d -> Le (add a c) (add b d) :=
+  \a b c d p q -> let dp : Nat := fst p in let dq : Nat := fst q in
+    (add dp dq,
+     compPath Nat (add (add a c) (add dp dq)) (add (add a dp) (add c dq)) (add b d)
+        (add_interchange a c dp dq)
+        (compPath Nat (add (add a dp) (add c dq)) (add b (add c dq)) (add b d)
+           (cong Nat Nat (\w -> add w (add c dq)) (add a dp) b (snd p))
+           (cong Nat Nat (\w -> add b w) (add c dq) d (snd q))))
+def word_le63 : (w : Word) -> Le (fst w) M63 :=
+  \w -> let h : Le (suc (fst w)) M64 := lt_le (fst w) M64 (snd w) in
+        (fst h, cong Nat Nat pred (add (suc (fst w)) (fst h)) M64 (snd h))
+def col_bound : (a b c : Word) -> Le (wlimb c) 1 -> Le (suc (add (add (fst a) (fst b)) (fst c))) (mul 2 M64) :=
+  \a b c hc ->
+  let A : Nat := fst a in
+  let B : Nat := fst b in
+  let C : Nat := wlimb c in
+  let hA : Le (suc A) M64 := lt_le (fst a) M64 (snd a) in
+  let hB : Le (suc B) M64 := lt_le (fst b) M64 (snd b) in
+  let hBC : Le (add B C) (suc B) :=
+     le_rewrite (add B C) (add B C) (add B 1) (suc B)
+        (prefl Nat (add B C)) (add_one_r B)
+        (add_mono_l C 1 B hc) in
+  let hBC64 : Le (add B C) M64 := le_trans (add B C) (suc B) M64 hBC hB in
+  let hsum : Le (add (suc A) (add B C)) (add M64 M64) := le_add_le (suc A) M64 (add B C) M64 hA hBC64 in
+  le_rewrite (add (suc A) (add B C)) (suc (add (add A B) C)) (add M64 M64) (mul 2 M64)
+     (cong Nat Nat suc (add A (add B C)) (add (add A B) C) (sym Nat (add (add A B) C) (add A (add B C)) (add_assoc A B C)))
+     (mul_two M64)
+     hsum
