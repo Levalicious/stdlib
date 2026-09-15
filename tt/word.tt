@@ -790,3 +790,17 @@ def wsubGo (x y : WB) : Sigma Word (\_ -> WB) :=
        (\b bs ihb -> (fst (wsubl (fst (iha bs)) a b), lcons (snd (wsubl (fst (iha bs)) a b)) (snd (iha bs))))
        y)
     x y
+
+-- a wsubb's borrow is at most one: it is blt of the two limbs, split by ble_cases and unwrapped by mod_le_one
+def wsubb_borrow_le : (x y : Word) -> Le (wlimb (snd (wsubb x y))) 1 :=
+  \x y -> ble_cases (suc (fst x)) (fst y) (Le (wlimb (snd (wsubb x y))) 1)
+     (\h1 -> le_rewrite (mod 1 M64) (mod (ble (suc (fst x)) (fst y)) M64) 1 1
+        (sym Nat (mod (ble (suc (fst x)) (fst y)) M64) (mod 1 M64)
+           (cong Nat Nat (\w -> mod w M64) (ble (suc (fst x)) (fst y)) 1 (idToPath h1)))
+        (prefl Nat 1)
+        (0, prefl Nat 1))
+     (\h0 -> le_rewrite (mod 0 M64) (mod (ble (suc (fst x)) (fst y)) M64) 1 1
+        (sym Nat (mod (ble (suc (fst x)) (fst y)) M64) (mod 0 M64)
+           (cong Nat Nat (\w -> mod w M64) (ble (suc (fst x)) (fst y)) 0 (idToPath h0)))
+        (prefl Nat 1)
+        (1, prefl Nat 1))
