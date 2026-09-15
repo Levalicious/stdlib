@@ -767,3 +767,26 @@ def wltGo_val : (x y : WB) -> Path Nat (wlen x) (wlen y) -> Path Nat (wltGoN x y
           (iha bs (injSuc h)))
        y)
     x
+
+-- ---- b6: the borrow scan ----
+-- The mirror of the carry scan, for the subtraction the erased Nat will need. wsubb gives a digit and a borrow of one
+-- subtraction; the borrow in is subtracted from that digit by a second wsubb, and the two borrows are words 0/1 whose
+-- sum is the column's borrow out. As in the carry scan, the step applies the OUTER induction hypothesis (iha bs) -
+-- a lazy IH is convertible with the recursive call only once applied.
+-- The value laws (the borrow analogue of waddGo_val, and the limb-level divmod that the Nat erasure also needs) are
+-- the next pieces; the scan is defined here so the laws have their subject.
+-- the borrowing column: (borrow out, digit), the mirror of wcol. wsubb gives the digit and the borrow of one
+-- subtraction, and the borrow in is subtracted from that digit - its own borrow is the second borrow out.
+def wsubl (b x y : Word) : Sigma Word (\_ -> Word) :=
+  let s : Sigma Word (\_ -> Word) := wsubb x y in
+  let t : Sigma Word (\_ -> Word) := wsubb (fst s) b in
+  (wadd (snd s) (snd t), fst t)
+-- the borrow scan: the borrows come back from the less significant side, exactly as the carries do
+def wsubGo (x y : WB) : Sigma Word (\_ -> WB) :=
+  elim List (\_ -> WB -> Sigma Word (\_ -> WB))
+    (\y -> (0, lnil {Word}))
+    (\a as iha -> \y -> elim List (\_ -> Sigma Word (\_ -> WB))
+       (fst (wsubl (fst (iha (lnil {Word}))) a 0), lcons (snd (wsubl (fst (iha (lnil {Word}))) a 0)) (snd (iha (lnil {Word}))))
+       (\b bs ihb -> (fst (wsubl (fst (iha bs)) a b), lcons (snd (wsubl (fst (iha bs)) a b)) (snd (iha bs))))
+       y)
+    x y
