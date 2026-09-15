@@ -362,3 +362,11 @@ def add_sub_lt : (m A B : Nat) -> Le (suc A) B -> Le B m -> Path Nat (add A (sub
      (compPath Nat (add D (add A (sub m B))) (add (add A (sub m B)) D) (add D (sub m D))
         (add_comm D (add A (sub m B)))
         (compPath Nat (add (add A (sub m B)) D) (add (sub m D) D) (add D (sub m D)) p1 (add_comm (sub m D) D)))
+
+-- cancellation on the left for bounds: the witness of the bigger sum collapses by the equality cancellation
+def le_cancel_l : (a x y : Nat) -> Le (add a x) (add a y) -> Le x y :=
+  \a x y h -> let d : Nat := fst h in
+    (d, add_cancel_l a (add x d) y
+       (compPath Nat (add a (add x d)) (add (add a x) d) (add a y)
+          (sym Nat (add (add a x) d) (add a (add x d)) (add_assoc a x d))
+          (snd h)))
