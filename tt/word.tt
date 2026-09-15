@@ -662,7 +662,53 @@ def wltGoN (x y : WB) : Nat :=
     (\y -> 0)
     (\a as iha -> \y -> elim List (\_ -> Nat)
        (0)
-       (\b bs ihb -> if01 (blt (wlimb a) (wlimb b)) 1 (if01 (beq (wlimb a) (wlimb b)) ihb 0))
+       (\b bs ihb -> if01 (ble (suc (wlimb a)) (wlimb b)) 1 (if01 (ble (suc (wlimb b)) (wlimb a)) 0 ihb))
        y)
     x y
 def wltGo (x y : WB) : Bool := n2b (wltGoN x y)
+
+-- ---- the comparison scan's step ----
+-- The step is arithmetic on the two head limbs and the two tails: a smaller head decides on its own, a greater head
+-- decides against, and equal heads cancel their common weight so the tails decide. Equal weights cancel in DECISION
+-- form (blt_cancel_add) - one direction from the monotonicity, the converse from the cancellation - which is what
+-- lets the equal case hand over to the tails' own comparison.
+def blt_cancel_add : (X A B : Nat) -> Path Nat (blt A B) (blt (add X A) (add X B)) :=
+  \X A B -> ble_cases (suc A) B (Path Nat (blt A B) (blt (add X A) (add X B)))
+    (\h1 -> compPath Nat (blt A B) 1 (blt (add X A) (add X B))
+        (idToPath h1)
+        (sym Nat (blt (add X A) (add X B)) 1 (idToPath (lt_add_mono_l A B X h1))))
+    (\h0 -> ble_cases (suc (add X A)) (add X B) (Path Nat (blt A B) (blt (add X A) (add X B)))
+        (\hbig -> elim Empty (\_ -> Path Nat (blt A B) (blt (add X A) (add X B)))
+            (ble_zero_not (suc A) B h0 (lt_le A B (lt_cancel_add X A B hbig))))
+        (\hsmall -> compPath Nat (blt A B) 0 (blt (add X A) (add X B))
+            (idToPath h0)
+            (sym Nat (blt (add X A) (add X B)) 0 (idToPath hsmall))))
+def le_suc_suc : (a b : Nat) -> Le (suc a) (suc b) -> Le a b :=
+  \a b h -> let d : Nat := fst h in (d, injSuc (snd h))
+def wltGoN_step : (a' b' P A B : Nat) -> (hA : Lt A P) -> (hB : Lt B P)
+    -> Path Nat (if01 (ble (suc a') b') 1 (if01 (ble (suc b') a') 0 (blt A B)))
+               (blt (add (mul a' P) A) (add (mul b' P) B)) :=
+  \a' b' P A B hA hB ->
+  let L : Nat := if01 (ble (suc a') b') 1 (if01 (ble (suc b') a') 0 (blt A B)) in
+  let R : Nat := blt (add (mul a' P) A) (add (mul b' P) B) in
+  ble_cases (suc a') b' (Path Nat L R)
+    (\h1 -> compPath Nat L 1 R
+       (cong Nat Nat (\v -> if01 v 1 (if01 (ble (suc b') a') 0 (blt A B))) (ble (suc a') b') 1 (idToPath h1))
+       (sym Nat R 1 (idToPath (cmp_head_lt a' b' P A B h1 hA))))
+    (\h0 -> ble_cases (suc b') a' (Path Nat L R)
+       (\h2 -> compPath Nat L (if01 (ble (suc b') a') 0 (blt A B)) R
+          (cong Nat Nat (\v -> if01 v 1 (if01 (ble (suc b') a') 0 (blt A B))) (ble (suc a') b') 0 (idToPath h0))
+          (compPath Nat (if01 (ble (suc b') a') 0 (blt A B)) 0 R
+             (cong Nat Nat (\v -> if01 v 0 (blt A B)) (ble (suc b') a') 1 (idToPath h2))
+             (ble_cases (suc (add (mul a' P) A)) (add (mul b' P) B) (Path Nat 0 R)
+                (\hbig -> elim Empty (\_ -> Path Nat 0 R)
+                   (lt_asym (add (mul a' P) A) (add (mul b' P) B) hbig (cmp_head_lt b' a' P B A h2 hB)))
+                (\hsmall -> sym Nat R 0 (idToPath hsmall)))))
+       (\h20 -> compPath Nat L (blt A B) R
+          (compPath Nat L (if01 (ble (suc b') a') 0 (blt A B)) (blt A B)
+             (cong Nat Nat (\v -> if01 v 1 (if01 (ble (suc b') a') 0 (blt A B))) (ble (suc a') b') 0 (idToPath h0))
+             (cong Nat Nat (\v -> if01 v 0 (blt A B)) (ble (suc b') a') 0 (idToPath h20)))
+          (compPath Nat (blt A B) (blt (add (mul b' P) A) (add (mul b' P) B)) R
+             (blt_cancel_add (mul b' P) A B)
+             (cong Nat Nat (\w -> blt (add (mul w P) A) (add (mul b' P) B)) b' a'
+                (sym Nat a' b' (le_antisym a' b' (le_suc_suc a' b' (ble_not (suc b') a' h20)) (le_suc_suc b' a' (ble_not (suc a') b' h0))))))))
