@@ -241,3 +241,122 @@ def wbvalAux_val : (x : WB) (acc : Nat) -> Path Nat (wbvalAux acc x) (add (mul a
   \x acc -> wbvalAuxK_val M64 x acc
 def wbval_cons : (l : Word) (r : WB) -> Path Nat (wbval (lcons l r)) (add (mul (wlimb l) (wpow (wlen r))) (wbval r)) :=
   \l r -> wbvalAuxK_val M64 r (wlimb l)
+
+-- ---- the column's value law ----
+-- A column is (carry out, digit) and the law is digit + M64 * carry = a + b + c, the carry out at most one so the
+-- next column may take it as its carry in. Every decision here is against a VARIABLE - the two carries, the limbs -
+-- and never against a literal: the carry is at most one because the quotient bound says so (dm_q_le_one), and its
+-- word value is its natural because mod_le_one unwraps it. The one thing that is not local is the column's total
+-- a + b + c fitting a word plus a carry, which is a HYPOTHESIS - the fold's own invariant supplies it.
+-- the carry of a waddc is at most one: the quotient bound (dm_q_le_one, a witness), then mod_le_one unwrapping the
+-- Word's own mod around it - by substId, so nothing inverts anything
+def waddc_carry_le : (a b : Word) -> Le (suc (add (fst a) (fst b))) (mul 2 M64) -> Le (fst (snd (waddc a b))) 1 :=
+  \a b h -> substId (\y -> Le y 1)
+    (pathToId (sym Nat (mod (div (add (fst a) (fst b)) M64) M64) (div (add (fst a) (fst b)) M64)
+       (mod_le_one (div (add (fst a) (fst b)) M64) (dm_q_le_one M63 (add (fst a) (fst b)) h))))
+    (dm_q_le_one M63 (add (fst a) (fst b)) h)
+-- suc of both sides of a witness bound
+def le_suc_both : (x y : Nat) -> Le x y -> Le (suc x) (suc y) :=
+  \x y h -> let d : Nat := fst h in (d, cong Nat Nat suc (add x d) y (snd h))
+-- the column identity, as arithmetic on the digits and carries alone: (c1 M64 + d1) + Y = X + Y with d1 + Y split
+def col_id : (c1 d1 c2 d2 X Y : Nat)
+    -> Path Nat (add (mul c1 M64) d1) X -> Path Nat (add (mul c2 M64) d2) (add d1 Y)
+    -> Path Nat (add (mul (add c1 c2) M64) d2) (add X Y) :=
+  \c1 d1 c2 d2 X Y e1 e2 -> compPath Nat
+    (add (mul (add c1 c2) M64) d2)
+    (add (add (mul c1 M64) (mul c2 M64)) d2)
+    (add X Y)
+    (cong Nat Nat (\w -> add w d2) (mul (add c1 c2) M64) (add (mul c1 M64) (mul c2 M64)) (mul_dist_r c1 c2 M64))
+    (compPath Nat
+       (add (add (mul c1 M64) (mul c2 M64)) d2)
+       (add (add (mul c1 M64) d1) Y)
+       (add X Y)
+       (compPath Nat
+          (add (add (mul c1 M64) (mul c2 M64)) d2)
+          (add (mul c1 M64) (add (mul c2 M64) d2))
+          (add (add (mul c1 M64) d1) Y)
+          (add_assoc (mul c1 M64) (mul c2 M64) d2)
+          (compPath Nat
+             (add (mul c1 M64) (add (mul c2 M64) d2))
+             (add (mul c1 M64) (add d1 Y))
+             (add (add (mul c1 M64) d1) Y)
+             (cong Nat Nat (\w -> add (mul c1 M64) w) (add (mul c2 M64) d2) (add d1 Y) e2)
+             (sym Nat (add (add (mul c1 M64) d1) Y) (add (mul c1 M64) (add d1 Y)) (add_assoc (mul c1 M64) d1 Y))))
+       (cong Nat Nat (\w -> add w Y) (add (mul c1 M64) d1) X e1))
+
+-- the column's value law: digit + M64 * carry = a + b + c, the carry out at most one. The size bound is a
+-- HYPOTHESIS on the column's total, which is what the fold's invariant supplies; every decision below is against a
+-- variable (the carries, the limbs), never against a literal.
+def wcol_val : (c a b : Word) -> Le (suc (add (add (fst a) (fst b)) (fst c))) (mul 2 M64)
+    -> Path Nat (add (wlimb (snd (wcol c a b))) (mul (wlimb (fst (wcol c a b))) M64))
+               (add (add (fst a) (fst b)) (fst c)) :=
+  \c a b H ->
+  let X : Nat := add (fst a) (fst b) in
+  let Y : Nat := fst c in
+  let p : Sigma Word (\_ -> Word) := waddc a b in
+  let c1 : Nat := fst (snd p) in
+  let d1 : Nat := fst (fst p) in
+  let s : Sigma Word (\_ -> Word) := waddc (fst p) c in
+  let c2 : Nat := fst (snd s) in
+  let d2 : Nat := fst (fst s) in
+  let h1 : Le (suc X) (mul 2 M64) :=
+     le_trans (suc X) (suc (add X Y)) (mul 2 M64)
+        (le_suc_both X (add X Y) (Y, prefl Nat (add X Y))) H in
+  let e1 : Path Nat (add (mul c1 M64) d1) X := waddc_val a b h1 in
+  let d1X : Le d1 X := (mul c1 M64, compPath Nat (add d1 (mul c1 M64)) (add (mul c1 M64) d1) X (add_comm d1 (mul c1 M64)) e1) in
+  let h2 : Le (suc (add d1 Y)) (mul 2 M64) :=
+     le_trans (suc (add d1 Y)) (suc (add X Y)) (mul 2 M64)
+        (le_suc_both (add d1 Y) (add X Y) (add_mono_r d1 X Y d1X)) H in
+  let e2 : Path Nat (add (mul c2 M64) d2) (add d1 Y) := waddc_val (fst p) c h2 in
+  let carry_le : Le (add c1 c2) 1 := le_one_of_not_le_two (add c1 c2)
+    (\hbig -> lt_self_absurd (add X Y)
+       (le_trans (suc (add X Y)) (mul 2 M64) (add X Y) H
+          (le_trans (mul 2 M64) (add (mul (add c1 c2) M64) d2) (add X Y)
+             (le_trans (mul 2 M64) (mul (add c1 c2) M64) (add (mul (add c1 c2) M64) d2)
+                (le_mul_r 2 (add c1 c2) M64 hbig)
+                (d2, prefl Nat (add (mul (add c1 c2) M64) d2)))
+             (d2, col_id c1 d1 c2 d2 X Y e1 e2)))) in
+  compPath Nat
+    (add d2 (mul (fst (wadd (snd p) (snd s))) M64))
+    (add d2 (mul (add c1 c2) M64))
+    (add X Y)
+    (cong Nat Nat (\w -> add d2 (mul w M64)) (fst (wadd (snd p) (snd s))) (add c1 c2) (mod_le_one (add c1 c2) carry_le))
+    (compPath Nat
+       (add d2 (mul (add c1 c2) M64))
+       (add (mul (add c1 c2) M64) d2)
+       (add X Y)
+       (add_comm d2 (mul (add c1 c2) M64))
+       (col_id c1 d1 c2 d2 X Y e1 e2))
+
+-- the carry out of a column is at most one, so the next column may take it as its carry in
+def wcol_carry_le : (c a b : Word) -> Le (suc (add (add (fst a) (fst b)) (fst c))) (mul 2 M64)
+    -> Le (wlimb (fst (wcol c a b))) 1 :=
+  \c a b H ->
+  let X : Nat := add (fst a) (fst b) in
+  let Y : Nat := fst c in
+  let p : Sigma Word (\_ -> Word) := waddc a b in
+  let c1 : Nat := fst (snd p) in
+  let d1 : Nat := fst (fst p) in
+  let s : Sigma Word (\_ -> Word) := waddc (fst p) c in
+  let c2 : Nat := fst (snd s) in
+  let d2 : Nat := fst (fst s) in
+  let h1 : Le (suc X) (mul 2 M64) :=
+     le_trans (suc X) (suc (add X Y)) (mul 2 M64)
+        (le_suc_both X (add X Y) (Y, prefl Nat (add X Y))) H in
+  let e1 : Path Nat (add (mul c1 M64) d1) X := waddc_val a b h1 in
+  let d1X : Le d1 X := (mul c1 M64, compPath Nat (add d1 (mul c1 M64)) (add (mul c1 M64) d1) X (add_comm d1 (mul c1 M64)) e1) in
+  let h2 : Le (suc (add d1 Y)) (mul 2 M64) :=
+     le_trans (suc (add d1 Y)) (suc (add X Y)) (mul 2 M64)
+        (le_suc_both (add d1 Y) (add X Y) (add_mono_r d1 X Y d1X)) H in
+  let e2 : Path Nat (add (mul c2 M64) d2) (add d1 Y) := waddc_val (fst p) c h2 in
+  let carry_le : Le (add c1 c2) 1 := le_one_of_not_le_two (add c1 c2)
+    (\hbig -> lt_self_absurd (add X Y)
+       (le_trans (suc (add X Y)) (mul 2 M64) (add X Y) H
+          (le_trans (mul 2 M64) (add (mul (add c1 c2) M64) d2) (add X Y)
+             (le_trans (mul 2 M64) (mul (add c1 c2) M64) (add (mul (add c1 c2) M64) d2)
+                (le_mul_r 2 (add c1 c2) M64 hbig)
+                (d2, prefl Nat (add (mul (add c1 c2) M64) d2)))
+             (d2, col_id c1 d1 c2 d2 X Y e1 e2)))) in
+  substId (\y -> Le y 1)
+    (pathToId (sym Nat (mod (add c1 c2) M64) (add c1 c2) (mod_le_one (add c1 c2) carry_le)))
+    carry_le
