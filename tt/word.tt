@@ -143,3 +143,32 @@ def waddc_val : (a b : Word) -> Le (suc (add (fst a) (fst b))) (mul 2 M64)
        (mod (div (add (fst a) (fst b)) M64) M64) (div (add (fst a) (fst b)) M64)
        (mod_le_one (div (add (fst a) (fst b)) M64) (dm_q_le_one M63 (add (fst a) (fst b)) h)))
     (divmod_spec (add (fst a) (fst b)) M63)
+
+-- ---- the Word-limb fold (M16b b5) ----
+-- The Nat-limb layer's shapes, over words: an accumulator value, a column that returns (carry, digit), and the fold
+-- that threads the carry back from the less significant side. The VALUE law for this fold is the next piece; it needs
+-- the limbs' bounds as hypotheses, and the second waddc of a column needs a WITNESS bound on mod - which is exactly
+-- what the slack iteration can supply and the blt decision cannot.
+def WB : U := List Word
+-- a limb's value, declared so the fold's step can apply it: a projection on a binder whose type is still a meta is
+-- rejected (the elim's element type is only solved later), an application pins it here
+def wlimb (w : Word) : Nat := fst w
+def wbvalAux (acc : Nat) (x : WB) : Nat :=
+  elim List (\_ -> Nat -> Nat) (\acc -> acc) (\l rest ih -> \acc -> ih (add (mul acc M64) (wlimb l))) x acc
+def wbval (x : WB) : Nat := wbvalAux 0 x
+-- one column: the carry in from the less significant side, two limbs; (carry out, digit). The carry in is added by a
+-- second waddc, and the two carries are themselves words 0/1 whose sum is the column's carry out.
+def wcol (c a b : Word) : Sigma Word (\_ -> Word) :=
+  let s : Sigma Word (\_ -> Word) := waddc (fst (waddc a b)) c in
+  (wadd (snd (waddc a b)) (snd s), fst s)
+def waddGo (x y : WB) : Sigma Word (\_ -> WB) :=
+  elim List (\_ -> WB -> Sigma Word (\_ -> WB))
+    (\y -> elim List (\_ -> Sigma Word (\_ -> WB))
+       (0, lnil {Word})
+       (\b bs ihb -> (fst (wcol (fst ihb) 0 b), lcons (snd (wcol (fst ihb) 0 b)) (snd ihb)))
+       y)
+    (\a as iha -> \y -> elim List (\_ -> Sigma Word (\_ -> WB))
+       (fst (wcol (fst (iha (lnil {Word}))) a 0), lcons (snd (wcol (fst (iha (lnil {Word}))) a 0)) (snd (iha (lnil {Word}))))
+       (\b bs ihb -> (fst (wcol (fst (iha bs)) a b), lcons (snd (wcol (fst (iha bs)) a b)) (snd (iha bs))))
+       y)
+    x y
