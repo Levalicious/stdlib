@@ -324,3 +324,41 @@ def add_sub_ge : (m A B : Nat) -> Le B A -> Le B m -> Path Nat (add A (sub m B))
      (compPath Nat (add (add (sub A B) B) (sub m B)) (add (sub A B) (add B (sub m B))) (add (sub A B) m)
         (add_assoc (sub A B) B (sub m B))
         (cong Nat Nat (\w -> add (sub A B) w) (add B (sub m B)) m (compPath Nat (add B (sub m B)) (add (sub m B) B) m (add_comm B (sub m B)) (sub_add_le m B hBm))))
+
+
+-- pred X is at most X, and sub a b is at most a: the two bounds the negative half of the two's complement identity
+-- reads its witnesses through.
+def pred_le : (X : Nat) -> Le (pred X) X :=
+  \X -> elim Nat (\X -> Le (pred X) X)
+    (le_refl 0)
+    (\k _ -> (1, compPath Nat (add k 1) (suc (add k 0)) (suc k) (add_suc_r k 0) (cong Nat Nat suc (add k 0) k (add_zero_r k))))
+    X
+def sub_le : (a b : Nat) -> Le (sub a b) a :=
+  \a b -> elim Nat (\b -> Le (sub a b) a)
+    (le_refl a)
+    (\b' ih -> le_trans (pred (sub a b')) (sub a b') a (pred_le (sub a b')) ih)
+    b
+-- the other half of the two's complement identity: when the difference IS negative the m stays, and the digit is
+-- m - (B - A). Cancellation gives uniqueness of X + D = m, so the characterization is not needed.
+def add_sub_lt : (m A B : Nat) -> Le (suc A) B -> Le B m -> Path Nat (add A (sub m B)) (sub m (sub B A)) :=
+  \m A B h hBm ->
+  let D : Nat := sub B A in
+  let hDm : Le D m := le_trans D B m (sub_le B A) hBm in
+  let eA : Path Nat (add A D) B :=
+     compPath Nat (add A D) (add D A) B (sym Nat (add D A) (add A D) (add_comm D A)) (sub_add_le B A (le_of_le_suc A B h)) in
+  let e1 : Path Nat (add (add A (sub m B)) D) m :=
+     compPath Nat (add (add A (sub m B)) D) (add A (add (sub m B) D)) m
+        (add_assoc A (sub m B) D)
+        (compPath Nat (add A (add (sub m B) D)) (add A (add D (sub m B))) m
+           (cong Nat Nat (\w -> add A w) (add (sub m B) D) (add D (sub m B)) (add_comm (sub m B) D))
+           (compPath Nat (add A (add D (sub m B))) (add (add A D) (sub m B)) m
+              (sym Nat (add (add A D) (sub m B)) (add A (add D (sub m B))) (add_assoc A D (sub m B)))
+              (compPath Nat (add (add A D) (sub m B)) (add B (sub m B)) m
+                 (cong Nat Nat (\w -> add w (sub m B)) (add A D) B eA)
+                 (compPath Nat (add B (sub m B)) (add (sub m B) B) m (add_comm B (sub m B)) (sub_add_le m B hBm))))) in
+  let p1 : Path Nat (add (add A (sub m B)) D) (add (sub m D) D) :=
+     compPath Nat (add (add A (sub m B)) D) m (add (sub m D) D) e1 (sym Nat (add (sub m D) D) m (sub_add_le m D hDm)) in
+  add_cancel_l D (add A (sub m B)) (sub m D)
+     (compPath Nat (add D (add A (sub m B))) (add (add A (sub m B)) D) (add D (sub m D))
+        (add_comm D (add A (sub m B)))
+        (compPath Nat (add (add A (sub m B)) D) (add (sub m D) D) (add D (sub m D)) p1 (add_comm (sub m D) D)))
