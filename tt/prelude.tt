@@ -119,11 +119,6 @@ native beq : Nat -> Nat -> Nat := \m n -> and01 (ble m n) (ble n m)
 def if01 : Nat -> Nat -> Nat -> Nat := \c t e -> elim Nat (\_ -> Nat) e (\k ih -> t) c
 def ifN : {A : U} -> Nat -> A -> A -> A := \{A} c t e -> elim Nat (\_ -> A) e (\_ _ -> t) c
 -- division with remainder as one iteration of the state (q, r) (nat.tt proves x = q*m + r and r < m)
-def dmstep : Nat -> Sigma Nat (\_ -> Nat) -> Sigma Nat (\_ -> Nat) :=
-  \m p -> ifN (blt (suc (snd p)) m) (fst p, suc (snd p)) (suc (fst p), 0)
-def dmiter : Nat -> Nat -> Sigma Nat (\_ -> Nat) := \m x -> elim Nat (\_ -> Sigma Nat (\_ -> Nat)) (0, 0) (\k ih -> dmstep m ih) x
-native div : Nat -> Nat -> Nat := \x m -> if01 (beq m 0) 0 (fst (dmiter m x))
-native mod : Nat -> Nat -> Nat := \x m -> if01 (beq m 0) x (snd (dmiter m x))
 native pow : Nat -> Nat -> Nat := \m n -> elim Nat (\_ -> Nat) 1 (\k ih -> mul m ih) n
 
 -- r < m, decided: the bound of the machine words (word.tt)
@@ -258,6 +253,13 @@ def siter_slack (m' x : Nat) : Nat := fst (fst (snd (siter_inv m' x)))
 def siter_le (m' x : Nat) : Le (suc (snd (siter m' x))) (suc m') := fst (snd (siter_inv m' x))
 -- the decision, carried by the invariant rather than recomputed: this is what modLtS returns, with no ble in sight
 def siter_lt (m' x : Nat) : Id Nat (blt (snd (siter m' x)) (suc m')) 1 := snd (snd (siter_inv m' x))
+
+-- the division iteration IS the slack fold: m = 0 is never reached through div and mod, which guard it, and the fold
+-- carries both the witness bound and the decision, so nothing below ever has to invert or unroll a comparison.
+def dmiter : Nat -> Nat -> Sigma Nat (\_ -> Nat) :=
+  \m x -> elim Nat (\_ -> Sigma Nat (\_ -> Nat)) (0, 0) (\m' _ -> siter m' x) m
+native div : Nat -> Nat -> Nat := \x m -> if01 (beq m 0) 0 (fst (dmiter m x))
+native mod : Nat -> Nat -> Nat := \x m -> if01 (beq m 0) x (snd (dmiter m x))
 def discreteNat : Discrete Nat := \m -> elim Nat (\m -> (n : Nat) -> Dec (Path Nat m n))
   (\n -> elim Nat (\n -> Dec (Path Nat zero n)) (yes (\_ -> zero)) (\k _ -> no (\p -> znots p)) n)
   (\m ihm -> \n -> elim Nat (\n -> Dec (Path Nat (suc m) n)) (no (\p -> snotz p))

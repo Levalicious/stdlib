@@ -55,29 +55,8 @@ def le_lt_eq : (r m : Nat) -> .(h1 : Id Nat (ble r m) 1) -> .(h2 : Id Nat (ble (
 -- division with remainder: after x steps from (0, 0) the state (q, r) satisfies x = q*m + r and r < m (m = suc m')
 def dm_q : Nat -> Nat -> Nat := \m x -> fst (dmiter m x)
 def dm_r : Nat -> Nat -> Nat := \m x -> snd (dmiter m x)
-def DmInv : (m x : Nat) -> Sigma Nat (\_ -> Nat) -> U :=
-  \m x p -> Sigma (Path Nat (add (mul (fst p) m) (snd p)) x) (\_ -> Id Nat (blt (snd p) m) 1)
-def blt_ones : (a b k : Nat) -> .(e : Id Nat (blt a b) (suc k)) -> Id Nat (blt a b) 1 := \a b k e -> ble_ones (suc a) b k e
-def dm_step_inv : (m' x : Nat) (p : Sigma Nat (\_ -> Nat)) -> DmInv (suc m') x p -> DmInv (suc m') (suc x) (dmstep (suc m') p) :=
-  \m' x p inv -> elim Nat (\c -> Id Nat c (blt (suc (snd p)) (suc m')) -> DmInv (suc m') (suc x) (ifN c (fst p, suc (snd p)) (suc (fst p), 0)))
-     (\e -> ( compPath Nat (add (mul (suc (fst p)) (suc m')) 0) (add (suc m') (mul (fst p) (suc m'))) (suc x)
-                (add_zero_r (add (suc m') (mul (fst p) (suc m'))))
-                (compPath Nat (suc (add m' (mul (fst p) (suc m')))) (suc (add (mul (fst p) (suc m')) m')) (suc x)
-                   (cong Nat Nat suc (add m' (mul (fst p) (suc m'))) (add (mul (fst p) (suc m')) m') (add_comm m' (mul (fst p) (suc m'))))
-                   (cong Nat Nat suc (add (mul (fst p) (suc m')) m') x
-                      (compPath Nat (add (mul (fst p) (suc m')) m') (add (mul (fst p) (suc m')) (snd p)) x
-                         (cong Nat Nat (\y -> add (mul (fst p) (suc m')) y) m' (snd p) (sym Nat (snd p) m' (le_lt_eq (snd p) m' (snd inv) (symId e))))
-                         (fst inv))))
-            , refl ))
-     (\c' _ e -> ( compPath Nat (add (mul (fst p) (suc m')) (suc (snd p))) (suc (add (mul (fst p) (suc m')) (snd p))) (suc x)
-                     (add_suc_r (mul (fst p) (suc m')) (snd p))
-                     (cong Nat Nat suc (add (mul (fst p) (suc m')) (snd p)) x (fst inv))
-                 , blt_ones (suc (snd p)) (suc m') c' (symId e) ))
-     (blt (suc (snd p)) (suc m')) refl
-def dm_inv : (m' x : Nat) -> DmInv (suc m') x (dmiter (suc m') x) :=
-  \m' x -> elim Nat (\x -> DmInv (suc m') x (dmiter (suc m') x)) (prefl Nat 0, refl) (\k ih -> dm_step_inv m' k (dmiter (suc m') k) ih) x
-def modLtS : (x m' : Nat) -> Lt (mod x (suc m')) (suc m') := \x m' -> snd (dm_inv m' x)
-def divmod_spec : (x m' : Nat) -> Path Nat (add (mul (div x (suc m')) (suc m')) (mod x (suc m'))) x := \x m' -> fst (dm_inv m' x)
+def modLtS : (x m' : Nat) -> Lt (mod x (suc m')) (suc m') := \x m' -> siter_lt m' x
+def divmod_spec : (x m' : Nat) -> Path Nat (add (mul (div x (suc m')) (suc m')) (mod x (suc m'))) x := \x m' -> fst (siter_inv m' x)
 
 def le_refl : (a : Nat) -> Le a a := \a -> (0, add_zero_r a)
 def le_trans : (a b c : Nat) -> Le a b -> Le b c -> Le a c :=
