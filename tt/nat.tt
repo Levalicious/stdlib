@@ -370,3 +370,11 @@ def le_cancel_l : (a x y : Nat) -> Le (add a x) (add a y) -> Le x y :=
        (compPath Nat (add a (add x d)) (add (add a x) d) (add a y)
           (sym Nat (add (add a x) d) (add a (add x d)) (add_assoc a x d))
           (snd h)))
+
+-- mod_mul_add with the multiple SECOND. The library's own form puts it first, which is safe at a symbolic k
+-- but not at k = 1: the statement then contains add (mul 1 M64) r, a literal in add's own recursion position,
+-- and forcing that walks. Keeping the literal out of that position is what makes the machine-word instance cheap.
+def mod_add_mul : (r k m' : Nat) -> Path Nat (mod (add r (mul k (suc m'))) (suc m')) (mod r (suc m')) :=
+  \r k m' -> compPath Nat (mod (add r (mul k (suc m'))) (suc m')) (mod (add (mul k (suc m')) r) (suc m')) (mod r (suc m'))
+     (cong Nat Nat (\w -> mod w (suc m')) (add r (mul k (suc m'))) (add (mul k (suc m')) r) (add_comm r (mul k (suc m'))))
+     (mod_mul_add k r m')
