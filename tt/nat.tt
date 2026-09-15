@@ -3,27 +3,6 @@
 -- Equalities are paths. The prelude's add, mul, sub, div, mod, ble are native on literals and unfold by their
 -- bodies on open terms: add and mul recurse on the first argument, ble on both, div and mod are one iteration.
 
--- addition
-def add_zero_r : (n : Nat) -> Path Nat (add n zero) n :=
-  \n -> elim Nat (\n -> Path Nat (add n zero) n) (prefl Nat zero) (\k ih -> cong Nat Nat suc (add k zero) k ih) n
-def add_zero_l : (n : Nat) -> Path Nat (add zero n) n := \n -> prefl Nat n
-def add_suc_r : (m n : Nat) -> Path Nat (add m (suc n)) (suc (add m n)) :=
-  \m n -> elim Nat (\m -> Path Nat (add m (suc n)) (suc (add m n))) (prefl Nat (suc n))
-            (\k ih -> cong Nat Nat suc (add k (suc n)) (suc (add k n)) ih) m
-def add_comm : (m n : Nat) -> Path Nat (add m n) (add n m) :=
-  \m n -> elim Nat (\m -> Path Nat (add m n) (add n m)) (sym Nat (add n zero) n (add_zero_r n))
-            (\k ih -> compPath Nat (suc (add k n)) (suc (add n k)) (add n (suc k))
-                        (cong Nat Nat suc (add k n) (add n k) ih)
-                        (sym Nat (add n (suc k)) (suc (add n k)) (add_suc_r n k))) m
-def add_assoc : (a b c : Nat) -> Path Nat (add (add a b) c) (add a (add b c)) :=
-  \a b c -> elim Nat (\a -> Path Nat (add (add a b) c) (add a (add b c))) (prefl Nat (add b c))
-              (\k ih -> cong Nat Nat suc (add (add k b) c) (add k (add b c)) ih) a
-def add_swap : (a b c : Nat) -> Path Nat (add a (add b c)) (add b (add a c)) :=
-  \a b c -> compPath Nat (add a (add b c)) (add (add a b) c) (add b (add a c))
-              (sym Nat (add (add a b) c) (add a (add b c)) (add_assoc a b c))
-              (compPath Nat (add (add a b) c) (add (add b a) c) (add b (add a c))
-                 (cong Nat Nat (\x -> add x c) (add a b) (add b a) (add_comm a b))
-                 (add_assoc b a c))
 
 -- multiplication
 def mul_zero_r : (n : Nat) -> Path Nat (mul n zero) zero :=
@@ -111,8 +90,6 @@ def dm_inv : (m' x : Nat) -> DmInv (suc m') x (dmiter (suc m') x) :=
 def modLtS : (x m' : Nat) -> Lt (mod x (suc m')) (suc m') := \x m' -> snd (dm_inv m' x)
 def divmod_spec : (x m' : Nat) -> Path Nat (add (mul (div x (suc m')) (suc m')) (mod x (suc m'))) x := \x m' -> fst (dm_inv m' x)
 
--- the order: a <= b is a witness d with a + d = b (the decidable ble is bridged below)
-def Le : Nat -> Nat -> U := \a b -> Sigma Nat (\d -> Path Nat (add a d) b)
 def le_refl : (a : Nat) -> Le a a := \a -> (0, add_zero_r a)
 def le_trans : (a b c : Nat) -> Le a b -> Le b c -> Le a c :=
   \a b c p q -> (add (fst p) (fst q),
@@ -124,8 +101,6 @@ def le_suc : (a b : Nat) -> Le a b -> Le a (suc b) :=
   \a b p -> (suc (fst p), compPath Nat (add a (suc (fst p))) (suc (add a (fst p))) (suc b) (add_suc_r a (fst p)) (cong Nat Nat suc (add a (fst p)) b (snd p)))
 def add_cancel_l : (m a b : Nat) -> Path Nat (add m a) (add m b) -> Path Nat a b :=
   \m a b -> elim Nat (\m -> Path Nat (add m a) (add m b) -> Path Nat a b) (\p -> p) (\k ih p -> ih (injSuc p)) m
-def add_zero_both : (a b : Nat) -> Path Nat (add a b) 0 -> Path Nat a 0 :=
-  \a b -> elim Nat (\a -> Path Nat (add a b) 0 -> Path Nat a 0) (\_ -> prefl Nat 0) (\k _ p -> elim Empty (\_ -> Path Nat (suc k) 0) (snotz p)) a
 def le_antisym : (a b : Nat) -> Le a b -> Le b a -> Path Nat a b :=
   \a b p q -> compPath Nat a (add a 0) b (sym Nat (add a 0) a (add_zero_r a))
     (compPath Nat (add a 0) (add a (fst p)) b
@@ -393,52 +368,3 @@ def dm_q_le_one : (m' x : Nat) -> Le (suc x) (mul 2 (suc m')) -> Le (dm_q (suc m
 def le_one_absurd : (j : Nat) -> Le (suc (suc j)) 1 -> Empty :=
   \j h -> snotz (injSuc (snd h))
 
--- ---- the division iteration with the slack carried (M16b b5) ----
--- The step is decided by the SLACK's structure - zero wraps, a successor carries - never by a comparison. That matters
--- because a blt against a machine-sized literal is a decision the checker would have to unroll (2^64 steps), while a
--- split on a hypothesis's structure is free. The invariant carries the slack as its Le, so the step's own input is
--- what decides it, and both branches come out constructive.
-def SInv : (m x : Nat) -> Sigma Nat (\_ -> Nat) -> U :=
-  \m x p -> Sigma (Path Nat (add (mul (fst p) m) (snd p)) x) (\_ -> Le (suc (snd p)) m)
-def sstep : (m' : Nat) (p : Sigma Nat (\_ -> Nat)) -> Le (suc (snd p)) (suc m') -> Sigma Nat (\_ -> Nat) :=
-  \m' p h -> elim Nat (\d -> Path Nat (add (suc (snd p)) d) (suc m') -> Sigma Nat (\_ -> Nat))
-    (\_ -> (suc (fst p), 0))
-    (\d' _ _ -> (fst p, suc (snd p)))
-    (fst h) (snd h)
-def s_step_inv : (m' x : Nat) (p : Sigma Nat (\_ -> Nat)) (inv : SInv (suc m') x p)
-               -> SInv (suc m') (suc x) (sstep m' p (snd inv)) :=
-  \m' x p inv -> elim Nat (\d -> (hp : Path Nat (add (suc (snd p)) d) (suc m')) -> SInv (suc m') (suc x) (sstep m' p (d, hp)))
-    (\hp -> ( compPath Nat (add (mul (suc (fst p)) (suc m')) 0) (add (suc m') (mul (fst p) (suc m'))) (suc x)
-                (add_zero_r (add (suc m') (mul (fst p) (suc m'))))
-                (compPath Nat (suc (add m' (mul (fst p) (suc m')))) (suc (add (mul (fst p) (suc m')) m')) (suc x)
-                   (cong Nat Nat suc (add m' (mul (fst p) (suc m'))) (add (mul (fst p) (suc m')) m') (add_comm m' (mul (fst p) (suc m'))))
-                   (cong Nat Nat suc (add (mul (fst p) (suc m')) m') x
-                      (compPath Nat (add (mul (fst p) (suc m')) m') (add (mul (fst p) (suc m')) (snd p)) x
-                         (cong Nat Nat (\y -> add (mul (fst p) (suc m')) y) m' (snd p)
-                            (compPath Nat m' (add (snd p) 0) (snd p)
-                               (sym Nat (add (snd p) 0) m' (injSuc hp))
-                               (add_zero_r (snd p))))
-                         (fst inv)))),
-              (m', prefl Nat (suc m')) ))
-    (\d' _ hp -> ( compPath Nat (add (mul (fst p) (suc m')) (suc (snd p))) (suc (add (mul (fst p) (suc m')) (snd p))) (suc x)
-                     (add_suc_r (mul (fst p) (suc m')) (snd p))
-                     (cong Nat Nat suc (add (mul (fst p) (suc m')) (snd p)) x (fst inv)),
-                   (d', compPath Nat (add (suc (suc (snd p))) d') (suc (add (suc (snd p)) d')) (suc m')
-                          (prefl Nat (suc (add (suc (snd p)) d')))
-                          (compPath Nat (suc (add (suc (snd p)) d')) (add (suc (snd p)) (suc d')) (suc m')
-                             (sym Nat (add (suc (snd p)) (suc d')) (suc (add (suc (snd p)) d')) (add_suc_r (suc (snd p)) d'))
-                             hp)) ))
-    (fst (snd inv)) (snd (snd inv))
-
--- the iteration, bundled with its invariant so the fold's own step can use the slack it carries
-def siterI : (m' x : Nat) -> Sigma (Sigma Nat (\_ -> Nat)) (SInv (suc m') x) :=
-  \m' x -> elim Nat (\x -> Sigma (Sigma Nat (\_ -> Nat)) (SInv (suc m') x))
-    ((0, 0), (prefl Nat 0, (m', prefl Nat (suc m'))))
-    (\k ih -> ( sstep m' (fst ih) (snd (snd ih)),
-                s_step_inv m' k (fst ih) (snd ih) ))
-    x
-def siter (m' x : Nat) : Sigma Nat (\_ -> Nat) := fst (siterI m' x)
-def siter_inv (m' x : Nat) : SInv (suc m') x (siter m' x) := snd (siterI m' x)
--- the slack the iteration carries: the witness of its bound, and the divisor's own generator
-def siter_slack (m' x : Nat) : Nat := fst (snd (siter_inv m' x))
-def siter_le (m' x : Nat) : Le (suc (snd (siter m' x))) (suc m') := snd (siter_inv m' x)
