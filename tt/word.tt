@@ -557,3 +557,36 @@ def waddGo_val : (x y : WB) -> Path Nat (wlen x) (wlen y) -> WInv x y :=
               cong Nat Nat suc (wlen (snd r)) (wlen as) (snd (snd ihv)) ) ))
        y)
     x
+
+-- ---- the comparison scan's order toolkit ----
+-- Lt is a decision (an Id over blt), so a witness comes out of it with lt_le and goes back in with le_lt: the
+-- companions of le_trans and add_mono_* that the Lt calculus was missing. lt_rewrite moves a decision along two
+-- paths, the way le_rewrite moves a bound.
+-- the comparison scan's order toolkit: Lt is a decision, so witnesses come from lt_le and go back with le_lt
+def lt_le_trans : (a b c : Nat) -> .(hl : Lt a b) -> Le b c -> Lt a c :=
+  \a b c hl hle -> le_lt a c (le_trans (suc a) b c (lt_le a b hl) hle)
+def lt_add_mono_r : (a b c : Nat) -> .(hl : Lt a b) -> Lt (add a c) (add b c) :=
+  \a b c hl -> le_lt (add a c) (add b c) (add_mono_r (suc a) b c (lt_le a b hl))
+def lt_add_mono_l : (a b c : Nat) -> .(hl : Lt a b) -> Lt (add c a) (add c b) :=
+  \a b c hl -> le_lt (add c a) (add c b)
+     (le_rewrite (add c (suc a)) (suc (add c a)) (add c b) (add c b)
+        (add_suc_r c a) (prefl Nat (add c b))
+        (add_mono_l (suc a) b c (lt_le a b hl)))
+def lt_rewrite : (X X' Y Y' : Nat) -> Path Nat X X' -> Path Nat Y Y' -> Lt X Y -> Lt X' Y' :=
+  \X X' Y Y' p q h -> substId (\z -> Lt X' z) (pathToId q) (substId (\z -> Lt z Y) (pathToId p) h)
+-- a limb list is strictly below its own weight: the head's limb is below M64 and the tail below its own weight
+def wbval_lt_wpow : (x : WB) -> Lt (wbval x) (wpow (wlen x)) :=
+  \x -> elim List (\x -> Lt (wbval x) (wpow (wlen x)))
+    (refl)
+    (\a as iha ->
+       lt_rewrite (add (mul (wlimb a) (wpow (wlen as))) (wbval as)) (wbval (lcons a as)) (mul (wpow (wlen as)) M64) (wpow (wlen (lcons a as)))
+          (sym Nat (wbval (lcons a as)) (add (mul (wlimb a) (wpow (wlen as))) (wbval as)) (wbval_cons a as)) (prefl Nat (mul (wpow (wlen as)) M64))
+          (lt_le_trans (add (mul (wlimb a) (wpow (wlen as))) (wbval as)) (add (mul (wlimb a) (wpow (wlen as))) (wpow (wlen as))) (mul (wpow (wlen as)) M64)
+             (lt_add_mono_l (wbval as) (wpow (wlen as)) (mul (wlimb a) (wpow (wlen as))) iha)
+             (le_rewrite (mul (suc (wlimb a)) (wpow (wlen as))) (add (mul (wlimb a) (wpow (wlen as))) (wpow (wlen as))) (mul M64 (wpow (wlen as))) (mul (wpow (wlen as)) M64)
+                (compPath Nat (mul (suc (wlimb a)) (wpow (wlen as))) (add (wpow (wlen as)) (mul (wlimb a) (wpow (wlen as)))) (add (mul (wlimb a) (wpow (wlen as))) (wpow (wlen as)))
+                   (prefl Nat (add (wpow (wlen as)) (mul (wlimb a) (wpow (wlen as)))))
+                   (add_comm (wpow (wlen as)) (mul (wlimb a) (wpow (wlen as)))))
+                (mul_comm M64 (wpow (wlen as)))
+                (le_mul_r (suc (wlimb a)) M64 (wpow (wlen as)) (lt_le (wlimb a) M64 (snd a))))))
+    x
