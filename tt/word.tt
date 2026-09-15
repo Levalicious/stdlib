@@ -129,3 +129,17 @@ def mod_le_one : (q : Nat) -> Le q 1 -> Path Nat (mod q M64) q :=
           (prefl Nat 1)
           (sym Nat (suc k) 1 (cong Nat Nat suc k 0 (add_zero_both k (fst h) (injSuc (snd h)))))))
     q
+
+-- the column's value law: a word sum's carry and digit reconstruct it. The sum's size bound is a HYPOTHESIS - the
+-- consumer supplies it (from the words' own bounds), so nothing here decides anything against a literal: the
+-- quotient is at most one (dm_q_le_one, a witness) and mod_le_one unwraps the carry's mod with no inversion.
+def waddc_val : (a b : Word) -> Le (suc (add (fst a) (fst b))) (mul 2 M64)
+             -> Path Nat (add (mul (fst (snd (waddc a b))) M64) (fst (fst (waddc a b)))) (add (fst a) (fst b)) :=
+  \a b h -> compPath Nat
+    (add (mul (mod (div (add (fst a) (fst b)) M64) M64) M64) (mod (add (fst a) (fst b)) M64))
+    (add (mul (div (add (fst a) (fst b)) M64) M64) (mod (add (fst a) (fst b)) M64))
+    (add (fst a) (fst b))
+    (cong Nat Nat (\w -> add (mul w M64) (mod (add (fst a) (fst b)) M64))
+       (mod (div (add (fst a) (fst b)) M64) M64) (div (add (fst a) (fst b)) M64)
+       (mod_le_one (div (add (fst a) (fst b)) M64) (dm_q_le_one M63 (add (fst a) (fst b)) h)))
+    (divmod_spec (add (fst a) (fst b)) M63)
