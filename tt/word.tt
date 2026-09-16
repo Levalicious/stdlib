@@ -1548,3 +1548,194 @@ def lt_mul_suc_l : (a c : Nat) -> Le 1 c -> Lt (mul a c) (mul (suc a) c) :=
          (prefl Nat (suc X))
          (prefl Nat (add c X))
          (le_add_le 1 c X X hc (le_refl X)))
+
+-- ---- the schoolbook multiply (M16b, 2026-09-16) ----
+-- x * y folds over y's limbs, each contribution placed at its limb's weight: a row x * h is the same fold with
+-- the limb products as rows, and each product is a limb times a limb (two limbs, below M64^2). The bounds the
+-- products need come from the words themselves through wlimb_le, which hands the Word's irrelevant witness to
+-- lt_le's irrelevant binder - the one position an irrelevant component may occupy.
+def wapp0 (x : WB) : WB := elim List (\_ -> WB) (lcons 0 (lnil {Word})) (\l r ih -> lcons l ih) x
+def wlen_app0 : (x : WB) -> Path Nat (wlen (wapp0 x)) (suc (wlen x)) :=
+  \x -> elim List (\x -> Path Nat (wlen (wapp0 x)) (suc (wlen x))) (prefl Nat 1)
+    (\l r ih -> compPath Nat (wlen (wapp0 (lcons l r))) (suc (wlen (wapp0 r))) (suc (suc (wlen r)))
+       (prefl Nat (suc (wlen (wapp0 r))))
+       (cong Nat Nat suc (wlen (wapp0 r)) (suc (wlen r)) ih))
+    x
+def wbval_app0 : (x : WB) -> Path Nat (wbval (wapp0 x)) (mul (wbval x) M64) :=
+  \x -> elim List (\x -> Path Nat (wbval (wapp0 x)) (mul (wbval x) M64)) (prefl Nat 0)
+    (\l r ih ->
+      let m1 : Nat := add (mul (wlimb l) (wpow (wlen (wapp0 r)))) (wbval (wapp0 r)) in
+      let m2 : Nat := add (mul (wlimb l) (wpow (suc (wlen r)))) (wbval (wapp0 r)) in
+      let m3 : Nat := add (mul (wlimb l) (wpow (suc (wlen r)))) (mul (wbval r) M64) in
+      let m4 : Nat := add (mul (wlimb l) (mul (wpow (wlen r)) M64)) (mul (wbval r) M64) in
+      let m5 : Nat := add (mul (mul (wlimb l) (wpow (wlen r))) M64) (mul (wbval r) M64) in
+      let m6 : Nat := mul (add (mul (wlimb l) (wpow (wlen r))) (wbval r)) M64 in
+      let s1 : Path Nat (wbval (wapp0 (lcons l r))) m1 := wbval_cons l (wapp0 r) in
+      let s2 : Path Nat m1 m2 := cong Nat Nat (\w -> add (mul (wlimb l) (wpow w)) (wbval (wapp0 r))) (wlen (wapp0 r)) (suc (wlen r)) (wlen_app0 r) in
+      let s3 : Path Nat m2 m3 := cong Nat Nat (\w -> add (mul (wlimb l) (wpow (suc (wlen r)))) w) (wbval (wapp0 r)) (mul (wbval r) M64) ih in
+      let s4 : Path Nat m3 m4 := cong Nat Nat (\w -> add (mul (wlimb l) w) (mul (wbval r) M64)) (wpow (suc (wlen r))) (mul (wpow (wlen r)) M64) (wpow_suc (wlen r)) in
+      let s5 : Path Nat m4 m5 := cong Nat Nat (\w -> add w (mul (wbval r) M64)) (mul (wlimb l) (mul (wpow (wlen r)) M64)) (mul (mul (wlimb l) (wpow (wlen r))) M64) (sym Nat (mul (mul (wlimb l) (wpow (wlen r))) M64) (mul (wlimb l) (mul (wpow (wlen r)) M64)) (mul_assoc (wlimb l) (wpow (wlen r)) M64)) in
+      let s6 : Path Nat m5 m6 := sym Nat m6 m5 (mul_dist_r (mul (wlimb l) (wpow (wlen r))) (wbval r) M64) in
+      let s7 : Path Nat m6 (mul (wbval (lcons l r)) M64) := cong Nat Nat (\w -> mul w M64) (add (mul (wlimb l) (wpow (wlen r))) (wbval r)) (wbval (lcons l r)) (sym Nat (wbval (lcons l r)) (add (mul (wlimb l) (wpow (wlen r))) (wbval r)) (wbval_cons l r)) in
+      compPath Nat (wbval (wapp0 (lcons l r))) m1 (mul (wbval (lcons l r)) M64) s1
+        (compPath Nat m1 m2 (mul (wbval (lcons l r)) M64) s2
+          (compPath Nat m2 m3 (mul (wbval (lcons l r)) M64) s3
+            (compPath Nat m3 m4 (mul (wbval (lcons l r)) M64) s4
+              (compPath Nat m4 m5 (mul (wbval (lcons l r)) M64) s5
+                (compPath Nat m5 m6 (mul (wbval (lcons l r)) M64) s6 s7))))))
+    x
+def wappk (k : Nat) (x : WB) : WB := elim Nat (\_ -> WB -> WB) (\x -> x) (\_ ih -> \x -> wapp0 (ih x)) k x
+def wlen_appk : (k : Nat) (x : WB) -> Path Nat (wlen (wappk k x)) (add (wlen x) k) :=
+  \k -> elim Nat (\k -> (x : WB) -> Path Nat (wlen (wappk k x)) (add (wlen x) k))
+    (\x -> sym Nat (add (wlen x) 0) (wlen x) (add_zero_r (wlen x)))
+    (\k ih -> \x -> compPath Nat (wlen (wappk (suc k) x)) (suc (wlen (wappk k x))) (add (wlen x) (suc k))
+       (wlen_app0 (wappk k x))
+       (compPath Nat (suc (wlen (wappk k x))) (suc (add (wlen x) k)) (add (wlen x) (suc k))
+          (cong Nat Nat suc (wlen (wappk k x)) (add (wlen x) k) (ih x))
+          (sym Nat (add (wlen x) (suc k)) (suc (add (wlen x) k)) (add_suc_r (wlen x) k))))
+    k
+def wbval_appk : (k : Nat) (x : WB) -> Path Nat (wbval (wappk k x)) (mul (wbval x) (wpow k)) :=
+  \k -> elim Nat (\k -> (x : WB) -> Path Nat (wbval (wappk k x)) (mul (wbval x) (wpow k)))
+    (\x -> compPath Nat (wbval (wappk 0 x)) (wbval x) (mul (wbval x) (wpow 0))
+       (prefl Nat (wbval x))
+       (sym Nat (mul (wbval x) (wpow 0)) (wbval x) (mul_one_r (wbval x))))
+    (\k ih -> \x -> compPath Nat (wbval (wappk (suc k) x)) (mul (wbval (wappk k x)) M64) (mul (wbval x) (wpow (suc k)))
+       (wbval_app0 (wappk k x))
+       (compPath Nat (mul (wbval (wappk k x)) M64) (mul (mul (wbval x) (wpow k)) M64) (mul (wbval x) (wpow (suc k)))
+          (cong Nat Nat (\w -> mul w M64) (wbval (wappk k x)) (mul (wbval x) (wpow k)) (ih x))
+          (compPath Nat (mul (mul (wbval x) (wpow k)) M64) (mul (wbval x) (mul (wpow k) M64)) (mul (wbval x) (wpow (suc k)))
+             (mul_assoc (wbval x) (wpow k) M64)
+             (cong Nat Nat (mul (wbval x)) (mul (wpow k) M64) (wpow (suc k)) (sym Nat (wpow (suc k)) (mul (wpow k) M64) (wpow_suc k))))))
+    k
+def mul_lt_M64M64 : (b c : Nat) -> Le (suc b) M64 -> Le (suc c) M64 -> Lt (mul b c) (mul M64 M64) :=
+  \b c hb hc -> elim Nat (\c -> Le (suc c) M64 -> Lt (mul b c) (mul M64 M64))
+    (\_ -> substId (\v -> Lt v (mul M64 M64)) (pathToId (sym Nat (mul b 0) 0 (mul_zero_r b)))
+       (le_lt 0 (mul M64 M64) (one_le_mul M64 M64 le_one_m64 le_one_m64)))
+    (\k ih -> \hk ->
+       lt_le_trans (mul b (suc k)) (mul (suc b) (suc k)) (mul M64 M64)
+          (lt_mul_suc_l b (suc k) (k, prefl Nat (suc k)))
+          (le_trans (mul (suc b) (suc k)) (mul M64 (suc k)) (mul M64 M64)
+             (le_mul_r (suc b) M64 (suc k) hb)
+             (le_rewrite (mul (suc k) M64) (mul M64 (suc k)) (mul M64 M64) (mul M64 M64)
+                (mul_comm (suc k) M64) (prefl Nat (mul M64 M64))
+                (le_mul_r (suc k) M64 M64 (le_of_le_suc (suc k) M64 hk)))))
+    c hc
+def wlimb_le : (w : Word) -> Le (suc (wlimb w)) M64 := \w -> lt_le (wlimb w) M64 (snd w)
+def wsmul1 (a h : Word) : WB := lcons (snd (wmull a h)) (lcons (fst (wmull a h)) (lnil {Word}))
+def wsmul1_val : (a h : Word) -> Path Nat (wbval (wsmul1 a h)) (mul (wlimb a) (wlimb h)) :=
+  \a h ->
+    let Z : Nat := mul (fst a) (fst h) in
+    let hi : Nat := div Z M64 in
+    let lo : Nat := mod Z M64 in
+    let hiW : Word := snd (wmull a h) in
+    let loW : Word := fst (wmull a h) in
+    let pw : Nat := wpow (wlen (lcons loW (lnil {Word}))) in
+    let hhi : Path Nat (wlimb hiW) hi := mod_lt_id (div Z M64) (div_lt_of_lt Z (mul_lt_M64M64 (fst a) (fst h) (wlimb_le a) (wlimb_le h))) in
+    let e0 : Nat := wbval (lcons loW (lnil {Word})) in
+    let e1 : Nat := add (mul (wlimb loW) (wpow (wlen (lnil {Word})))) (wbval (lnil {Word})) in
+    let e2 : Nat := add (mul (wlimb loW) 1) 0 in
+    let e3 : Nat := add (wlimb loW) 0 in
+    let e4 : Nat := wlimb loW in
+    let r0 : Path Nat e0 e1 := wbval_cons loW (lnil {Word}) in
+    let r1 : Path Nat e1 e2 := prefl Nat e2 in
+    let r2 : Path Nat e2 e3 := cong Nat Nat (\v -> add v 0) (mul (wlimb loW) 1) (wlimb loW) (mul_one_r (wlimb loW)) in
+    let r3 : Path Nat e3 e4 := add_zero_r (wlimb loW) in
+    let r4 : Path Nat e4 lo := prefl Nat lo in
+    let hinner : Path Nat e0 lo :=
+       compPath Nat e0 e1 lo r0 (compPath Nat e1 e2 lo r1 (compPath Nat e2 e3 lo r2 (compPath Nat e3 e4 lo r3 r4))) in
+    let s0 : Nat := wbval (lcons hiW (lcons loW (lnil {Word}))) in
+    let s1 : Nat := add (mul (wlimb hiW) pw) (wbval (lcons loW (lnil {Word}))) in
+    let s2 : Nat := add (mul hi pw) (wbval (lcons loW (lnil {Word}))) in
+    let s3 : Nat := add (mul hi M64) (wbval (lcons loW (lnil {Word}))) in
+    let s4 : Nat := add (mul hi M64) lo in
+    let s5 : Nat := add (mul (div Z M64) M64) (mod Z M64) in
+    let p0 : Path Nat s0 s1 := wbval_cons hiW (lcons loW (lnil {Word})) in
+    let p1 : Path Nat s1 s2 := cong Nat Nat (\v -> add (mul v pw) (wbval (lcons loW (lnil {Word})))) (wlimb hiW) hi hhi in
+    let p2 : Path Nat s2 s3 := cong Nat Nat (\v -> add (mul hi v) (wbval (lcons loW (lnil {Word})))) pw M64 (prefl Nat M64) in
+    let p3 : Path Nat s3 s4 := cong Nat Nat (\v -> add (mul hi M64) v) (wbval (lcons loW (lnil {Word}))) lo hinner in
+    let p4 : Path Nat s4 s5 := prefl Nat (add (mul (div Z M64) M64) (mod Z M64)) in
+    let p5 : Path Nat s5 Z := divmod_spec Z M63 in
+    compPath Nat s0 s1 Z p0
+      (compPath Nat s1 s2 Z p1
+        (compPath Nat s2 s3 Z p2
+          (compPath Nat s3 s4 Z p3
+            (compPath Nat s4 s5 Z p4 p5))))
+def wrow (x : WB) (h : Word) : WB :=
+  elim List (\_ -> WB) (lnil {Word}) (\a as ih -> badd (wappk (wlen as) (wsmul1 a h)) ih) x
+def wrow_step : (a : Word) (as : WB) (h : Word) -> Path Nat (wbval (wrow as h)) (mul (wbval as) (wlimb h))
+    -> Path Nat (wbval (wrow (lcons a as) h)) (mul (wbval (lcons a as)) (wlimb h)) :=
+  \a as h ih ->
+    let A : Nat := wbval (wappk (wlen as) (wsmul1 a h)) in
+    let B : Nat := wbval (wrow as h) in
+    let C : Nat := mul (wbval (wsmul1 a h)) (wpow (wlen as)) in
+    let D : Nat := mul (wbval as) (wlimb h) in
+    let E : Nat := mul (wbval (lcons a as)) (wlimb h) in
+    let F : Nat := mul (wlimb a) (wpow (wlen as)) in
+    let q1 : Path Nat (wbval (wrow (lcons a as) h)) (add A B) := badd_val (wappk (wlen as) (wsmul1 a h)) (wrow as h) in
+    let q2 : Path Nat (add A B) (add C D) :=
+       compPath Nat (add A B) (add C B) (add C D)
+          (cong Nat Nat (\v -> add v B) A C (wbval_appk (wlen as) (wsmul1 a h)))
+          (cong Nat Nat (\v -> add C v) B D ih) in
+    let qc : Path Nat C (mul F (wlimb h)) :=
+       compPath Nat C (mul (mul (wlimb a) (wlimb h)) (wpow (wlen as))) (mul F (wlimb h))
+          (cong Nat Nat (\v -> mul v (wpow (wlen as))) (wbval (wsmul1 a h)) (mul (wlimb a) (wlimb h)) (wsmul1_val a h))
+          (compPath Nat (mul (mul (wlimb a) (wlimb h)) (wpow (wlen as))) (mul (wlimb a) (mul (wlimb h) (wpow (wlen as)))) (mul F (wlimb h))
+             (mul_assoc (wlimb a) (wlimb h) (wpow (wlen as)))
+             (compPath Nat (mul (wlimb a) (mul (wlimb h) (wpow (wlen as)))) (mul (wlimb a) (mul (wpow (wlen as)) (wlimb h))) (mul F (wlimb h))
+                (cong Nat Nat (mul (wlimb a)) (mul (wlimb h) (wpow (wlen as))) (mul (wpow (wlen as)) (wlimb h)) (mul_comm (wlimb h) (wpow (wlen as))))
+                (sym Nat (mul F (wlimb h)) (mul (wlimb a) (mul (wpow (wlen as)) (wlimb h))) (mul_assoc (wlimb a) (wpow (wlen as)) (wlimb h))))) in
+    let q3 : Path Nat (add C D) (add (mul F (wlimb h)) D) := cong Nat Nat (\v -> add v D) C (mul F (wlimb h)) qc in
+    let q4 : Path Nat (add (mul F (wlimb h)) D) E :=
+       compPath Nat (add (mul F (wlimb h)) D) (mul (add F (wbval as)) (wlimb h)) E
+          (sym Nat (mul (add F (wbval as)) (wlimb h)) (add (mul F (wlimb h)) D) (mul_dist_r F (wbval as) (wlimb h)))
+          (cong Nat Nat (\v -> mul v (wlimb h)) (add F (wbval as)) (wbval (lcons a as)) (sym Nat (wbval (lcons a as)) (add F (wbval as)) (wbval_cons a as))) in
+    let q5 : Path Nat (add C D) E := compPath Nat (add C D) (add (mul F (wlimb h)) D) E q3 q4 in
+    let q6 : Path Nat (add A B) E := compPath Nat (add A B) (add C D) E q2 q5 in
+    compPath Nat (wbval (wrow (lcons a as) h)) (add A B) E q1 q6
+def wrow_val : (x : WB) (h : Word) -> Path Nat (wbval (wrow x h)) (mul (wbval x) (wlimb h)) :=
+  \x h -> elim List (\x -> Path Nat (wbval (wrow x h)) (mul (wbval x) (wlimb h)))
+    (prefl Nat 0)
+    (\a as ih -> wrow_step a as h ih)
+    x
+def bmul (x y : WB) : WB :=
+  elim List (\_ -> WB) (lnil {Word}) (\h t ih -> badd (wappk (wlen t) (wrow x h)) ih) y
+def bmul_step : (x : WB) (h : Word) (t : WB) -> Path Nat (wbval (bmul x t)) (mul (wbval x) (wbval t))
+    -> Path Nat (wbval (bmul x (lcons h t))) (mul (wbval x) (wbval (lcons h t))) :=
+  \x h t ih ->
+    let X : Nat := wbval x in
+    let H : Nat := wlimb h in
+    let P : Nat := wpow (wlen t) in
+    let Vt : Nat := wbval t in
+    let A : Nat := wbval (wappk (wlen t) (wrow x h)) in
+    let B : Nat := wbval (bmul x t) in
+    let C : Nat := mul (wbval (wrow x h)) P in
+    let D : Nat := mul X Vt in
+    let E : Nat := mul X (wbval (lcons h t)) in
+    let F : Nat := mul X H in
+    let T : Nat := mul H P in
+    let q1 : Path Nat (wbval (bmul x (lcons h t))) (add A B) := badd_val (wappk (wlen t) (wrow x h)) (bmul x t) in
+    let q2 : Path Nat (add A B) (add C D) :=
+       compPath Nat (add A B) (add C B) (add C D)
+          (cong Nat Nat (\v -> add v B) A C (wbval_appk (wlen t) (wrow x h)))
+          (cong Nat Nat (\v -> add C v) B D ih) in
+    let q3 : Path Nat (add C D) (add (mul F P) D) :=
+       cong Nat Nat (\v -> add (mul v P) D) (wbval (wrow x h)) F
+          (compPath Nat (wbval (wrow x h)) (mul X H) F
+             (wrow_val x h)
+             (prefl Nat (mul X H))) in
+    let q4 : Path Nat (add (mul F P) D) E :=
+       compPath Nat (add (mul F P) D) (add (mul X T) D) E
+          (cong Nat Nat (\v -> add v D) (mul F P) (mul X T) (mul_assoc X H P))
+          (compPath Nat (add (mul X T) D) (mul X (add T Vt)) E
+             (sym Nat (mul X (add T Vt)) (add (mul X T) D) (mul_dist_l X T Vt))
+             (compPath Nat (mul X (add T Vt)) (mul X (wbval (lcons h t))) E
+                (cong Nat Nat (mul X) (add T Vt) (wbval (lcons h t)) (sym Nat (wbval (lcons h t)) (add T Vt) (wbval_cons h t)))
+                (prefl Nat E))) in
+    let q5 : Path Nat (add C D) E := compPath Nat (add C D) (add (mul F P) D) E q3 q4 in
+    let q6 : Path Nat (add A B) E := compPath Nat (add A B) (add C D) E q2 q5 in
+    compPath Nat (wbval (bmul x (lcons h t))) (add A B) E q1 q6
+def bmul_val : (x y : WB) -> Path Nat (wbval (bmul x y)) (mul (wbval x) (wbval y)) :=
+  \x y -> elim List (\y -> Path Nat (wbval (bmul x y)) (mul (wbval x) (wbval y)))
+    (sym Nat (mul (wbval x) 0) 0 (mul_zero_r (wbval x)))
+    (\h t ih -> bmul_step x h t ih)
+    y
