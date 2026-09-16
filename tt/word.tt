@@ -983,3 +983,17 @@ def wsubl_bo_upper : (b x y : Word) -> Le (wlimb b) 1 ->
   \b x y hc -> lt_add_three_le (wsubl_digit b x y) (fst b) (fst y) M64
      (lt_le (fst (fst (wsubb (fst (wsubb x y)) b))) M64 (snd (fst (wsubb (fst (wsubb x y)) b)))) hc
      (lt_le (fst y) M64 (snd y))
+
+-- the exclusion's lower half: if the two borrows summed to two, the column's total would reach two words, and the
+-- shift is what says so - read backwards through the rewrite, with the witness commuted into place.
+def wsubl_bo_lower : (b x y : Word) -> Le 2 (add (wborrow x y) (wborrow (fst (wsubb x y)) b)) ->
+    Le (mul 2 M64) (add (add (wsubl_digit b x y) (fst b)) (fst y)) :=
+  \b x y h2 -> le_rewrite (mul 2 M64) (mul 2 M64)
+     (add (fst x) (mul (add (wborrow x y) (wborrow (fst (wsubb x y)) b)) M64))
+     (add (add (wsubl_digit b x y) (fst b)) (fst y))
+     (prefl Nat (mul 2 M64))
+     (sym Nat (add (add (wsubl_digit b x y) (fst b)) (fst y)) (add (fst x) (mul (add (wborrow x y) (wborrow (fst (wsubb x y)) b)) M64)) (wsubl_shift b x y))
+     (le_trans (mul 2 M64) (mul (add (wborrow x y) (wborrow (fst (wsubb x y)) b)) M64)
+        (add (fst x) (mul (add (wborrow x y) (wborrow (fst (wsubb x y)) b)) M64))
+        (le_mul_r 2 (add (wborrow x y) (wborrow (fst (wsubb x y)) b)) M64 h2)
+        (fst x, add_comm (mul (add (wborrow x y) (wborrow (fst (wsubb x y)) b)) M64) (fst x)))
