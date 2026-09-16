@@ -388,3 +388,10 @@ def sub_add_shift : (m X A : Nat) -> Le X m -> Path Nat (add (sub m X) (add A X)
         (compPath Nat (add (add A (sub m X)) X) (add A (add (sub m X) X)) (add A m)
            (add_assoc A (sub m X) X)
            (cong Nat Nat (\w -> add A w) (add (sub m X) X) m (sub_add_le m X h))))
+
+-- a remainder is at most its dividend: divmod_spec is the witness, commuted into the Le's own order
+def mod_le_self : (m' x : Nat) -> Le (mod x (suc m')) x :=
+  \m' x -> (mul (div x (suc m')) (suc m'),
+     compPath Nat (add (mod x (suc m')) (mul (div x (suc m')) (suc m'))) (add (mul (div x (suc m')) (suc m')) (mod x (suc m'))) x
+        (add_comm (mod x (suc m')) (mul (div x (suc m')) (suc m')))
+        (divmod_spec x m'))
