@@ -1739,3 +1739,23 @@ def bmul_val : (x y : WB) -> Path Nat (wbval (bmul x y)) (mul (wbval x) (wbval y
     (sym Nat (mul (wbval x) 0) 0 (mul_zero_r (wbval x)))
     (\h t ih -> bmul_step x h t ih)
     y
+
+-- ---- the chain power (M16b, 2026-09-16) ----
+-- by the exponent, with the multiply's value law doing the work
+-- the chain for one, and its value
+def wone : WB := lcons 1 (lnil {Word})
+def wbval_wone : Path Nat (wbval wone) 1 :=
+  compPath Nat (wbval wone) (add (mul (wlimb 1) (wpow (wlen (lnil {Word})))) (wbval (lnil {Word}))) 1
+    (wbval_cons 1 (lnil {Word}))
+    (compPath Nat (add (mul (wlimb 1) (wpow (wlen (lnil {Word})))) (wbval (lnil {Word}))) (add 1 0) 1
+       (prefl Nat (add 1 0))
+       (add_zero_r 1))
+-- the chain power, by the exponent, with bmul's value law doing the work
+def bpow (x : WB) (k : Nat) : WB := elim Nat (\_ -> WB) wone (\_ ih -> bmul x ih) k
+def bpow_val : (x : WB) (k : Nat) -> Path Nat (wbval (bpow x k)) (pow (wbval x) k) :=
+  \x k -> elim Nat (\k -> Path Nat (wbval (bpow x k)) (pow (wbval x) k))
+    (wbval_wone)
+    (\j ih -> compPath Nat (wbval (bpow x (suc j))) (mul (wbval x) (wbval (bpow x j))) (pow (wbval x) (suc j))
+       (bmul_val x (bpow x j))
+       (cong Nat Nat (mul (wbval x)) (wbval (bpow x j)) (pow (wbval x) j) ih))
+    k
