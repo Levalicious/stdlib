@@ -1777,3 +1777,18 @@ def bdivmod (x y : WB) : Sigma WB (\_ -> WB) :=
   ble_cases (suc (wbval y)) 1 (Sigma WB (\_ -> WB))
     (\_ -> (lnil {Word}, x))
     (\_ -> bdivmodGo y (wbval x) x)
+
+-- the difference cannot exceed what the sum allows: a <= j + Y gives sub a Y <= j
+def sub_le_of_add_le : (a j Y : Nat) -> Le a (add j Y) -> Le (sub a Y) j :=
+  \a j -> elim Nat (\a -> (Y : Nat) -> Le a (add j Y) -> Le (sub a Y) j)
+    (\Y _ -> (j, compPath Nat (add (sub 0 Y) j) (add 0 j) j
+                    (cong Nat Nat (\v -> add v j) (sub 0 Y) 0 (sub_add_self_zero 0 Y))
+                    (prefl Nat j)))
+    (\i ih -> \Y -> elim Nat (\Y -> Le (suc i) (add j Y) -> Le (sub (suc i) Y) j)
+       (\h -> le_rewrite (sub (suc i) 0) (suc i) j j (sym Nat (suc i) (sub (suc i) 0) (sub_zero (suc i))) (prefl Nat j)
+                 (le_rewrite (suc i) (suc i) (add j 0) j (prefl Nat (suc i)) (add_zero_r j) h))
+       (\k _ -> \h -> le_rewrite (sub i k) (sub (suc i) (suc k)) j j (sym Nat (sub (suc i) (suc k)) (sub i k) (sub_sucsuc i k)) (prefl Nat j)
+                 (ih k (le_suc_suc i (add j k)
+                    (le_rewrite (suc i) (suc i) (add j (suc k)) (suc (add j k)) (prefl Nat (suc i)) (add_suc_r j k) h))))
+       Y)
+    a
