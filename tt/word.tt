@@ -1420,3 +1420,16 @@ def badd_val : (x y : WB) -> Path Nat (wbval (badd x y)) (add (wbval x) (wbval y
     (compPath Nat (add (wbval x') (wbval y')) (add (wbval x) (wbval y')) (add (wbval x) (wbval y))
        (cong Nat Nat (\s -> add s (wbval y')) (wbval x') (wbval x) (wbval_zap (suc (wlen y)) x))
        (cong Nat Nat (\s -> add (wbval x) s) (wbval y') (wbval y) (wbval_zap (suc (wlen x)) y)))
+
+-- n - (n + m) = 0: the truncated subtraction of a sum of itself, by induction on the added part
+def sub_add_self_zero : (n m : Nat) -> Path Nat (sub n (add n m)) 0 :=
+  \n m -> elim Nat (\k -> Path Nat (sub n (add n k)) 0)
+    (compPath Nat (sub n (add n 0)) (sub n n) 0
+       (cong Nat Nat (\w -> sub n w) (add n 0) n (add_zero_r n))
+       (sub_self n))
+    (\k ih -> compPath Nat (sub n (add n (suc k))) (pred (sub n (add n k))) 0
+       (compPath Nat (sub n (add n (suc k))) (sub n (suc (add n k))) (pred (sub n (add n k)))
+          (cong Nat Nat (\w -> sub n w) (add n (suc k)) (suc (add n k)) (add_suc_r n k))
+          (prefl Nat (pred (sub n (add n k)))))
+       (cong Nat Nat pred (sub n (add n k)) 0 ih))
+    m
