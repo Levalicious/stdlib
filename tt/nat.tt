@@ -378,3 +378,13 @@ def mod_add_mul : (r k m' : Nat) -> Path Nat (mod (add r (mul k (suc m'))) (suc 
   \r k m' -> compPath Nat (mod (add r (mul k (suc m'))) (suc m')) (mod (add (mul k (suc m')) r) (suc m')) (mod r (suc m'))
      (cong Nat Nat (\w -> mod w (suc m')) (add r (mul k (suc m'))) (add (mul k (suc m')) r) (add_comm r (mul k (suc m'))))
      (mod_mul_add k r m')
+
+-- the shuffle the borrow column needs, over a symbolic bound: the digit's m - X and the tail's X cancel
+def sub_add_shift : (m X A : Nat) -> Le X m -> Path Nat (add (sub m X) (add A X)) (add A m) :=
+  \m X A h -> compPath Nat (add (sub m X) (add A X)) (add (add (sub m X) A) X) (add A m)
+     (sym Nat (add (add (sub m X) A) X) (add (sub m X) (add A X)) (add_assoc (sub m X) A X))
+     (compPath Nat (add (add (sub m X) A) X) (add (add A (sub m X)) X) (add A m)
+        (cong Nat Nat (\w -> add w X) (add (sub m X) A) (add A (sub m X)) (add_comm (sub m X) A))
+        (compPath Nat (add (add A (sub m X)) X) (add A (add (sub m X) X)) (add A m)
+           (add_assoc A (sub m X) X)
+           (cong Nat Nat (\w -> add A w) (add (sub m X) X) m (sub_add_le m X h))))

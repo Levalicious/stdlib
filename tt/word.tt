@@ -804,3 +804,83 @@ def wsubb_borrow_le : (x y : Word) -> Le (wlimb (snd (wsubb x y))) 1 :=
            (cong Nat Nat (\w -> mod w M64) (ble (suc (fst x)) (fst y)) 0 (idToPath h0)))
         (prefl Nat 1)
         (1, prefl Nat 1))
+
+-- ---- the borrow column's value law ----
+-- d + y = x + borrow * M64: one wsubb's digit and borrow reconstruct the difference. ble_cases splits on the
+-- comparison the borrow decides, add_sub_lt and add_sub_ge are the two halves of the two's complement identity for
+-- the digit, and le_cancel_l reads the bound the negative half needs. Everything is stated over a symbolic bound
+-- and every shuffle is a symbolic lemma (sub_add_shift): at a literal modulus the shuffles' own statements would
+-- force add (mul 1 M64) r, which walks.
+-- a wsubb's digit and borrow reconstruct the two limbs: d + y = x + borrow * M64
+def wsubb_val : (x y : Word) -> Path Nat (add (wlimb (fst (wsubb x y))) (fst y)) (add (fst x) (mul (wlimb (snd (wsubb x y))) M64)) :=
+  \x y -> ble_cases (suc (fst x)) (fst y)
+     (Path Nat (add (wlimb (fst (wsubb x y))) (fst y)) (add (fst x) (mul (wlimb (snd (wsubb x y))) M64)))
+     (\h1 ->
+       let A : Nat := fst x in
+       let B : Nat := fst y in
+       let H : Le (suc A) B := lt_le A B h1 in
+       let X : Nat := sub B A in
+       let hBM64 : Le B M64 := le_of_le_suc B M64 (lt_le B M64 (snd y)) in
+       let hXM : Le X M64 := le_trans X B M64 (sub_le B A) hBM64 in
+       let eX : Path Nat (add A X) B :=
+          compPath Nat (add A X) (add X A) B (sym Nat (add X A) (add A X) (add_comm X A)) (sub_add_le B A (le_of_le_suc A B H)) in
+       let h1X : Le 1 X := le_cancel_l A 1 X
+          (le_rewrite (suc A) (add A 1) B (add A X)
+             (sym Nat (add A 1) (suc A) (add_one_r A)) (sym Nat (add A X) B eX) H) in
+       let eLt : Lt (sub M64 X) M64 := le_lt (sub M64 X) M64
+          (le_rewrite (add (sub M64 X) 1) (suc (sub M64 X)) M64 M64 (add_one_r (sub M64 X)) (prefl Nat M64)
+             (le_trans (add (sub M64 X) 1) (add (sub M64 X) X) M64
+                (add_mono_l 1 X (sub M64 X) h1X)
+                (0, compPath Nat (add (add (sub M64 X) X) 0) (add (sub M64 X) X) M64
+                   (add_zero_r (add (sub M64 X) X)) (sub_add_le M64 X hXM)))) in
+       let eD : Path Nat (wlimb (fst (wsubb x y))) (sub M64 X) :=
+          compPath Nat (wlimb (fst (wsubb x y))) (mod (add A (sub M64 B)) M64) (sub M64 X)
+             (prefl Nat (mod (add A (sub M64 B)) M64))
+             (compPath Nat (mod (add A (sub M64 B)) M64) (mod (sub M64 X) M64) (sub M64 X)
+                (cong Nat Nat (\w -> mod w M64) (add A (sub M64 B)) (sub M64 X) (add_sub_lt M64 A B H hBM64))
+                (mod_small M63 (sub M64 X) eLt)) in
+       let eB : Path Nat (wlimb (snd (wsubb x y))) 1 :=
+          compPath Nat (wlimb (snd (wsubb x y))) (mod (ble (suc A) B) M64) 1
+             (prefl Nat (mod (ble (suc A) B) M64))
+             (compPath Nat (mod (ble (suc A) B) M64) (mod 1 M64) 1
+                (cong Nat Nat (\w -> mod w M64) (ble (suc A) B) 1 (idToPath h1))
+                (prefl Nat 1)) in
+       compPath Nat (add (wlimb (fst (wsubb x y))) B) (add (sub M64 X) B) (add A (mul (wlimb (snd (wsubb x y))) M64))
+          (cong Nat Nat (\w -> add w B) (wlimb (fst (wsubb x y))) (sub M64 X) eD)
+          (compPath Nat (add (sub M64 X) B) (add (sub M64 X) (add A X)) (add A (mul (wlimb (snd (wsubb x y))) M64))
+             (cong Nat Nat (\w -> add (sub M64 X) w) B (add A X) (sym Nat (add A X) B eX))
+             (compPath Nat (add (sub M64 X) (add A X)) (add A M64) (add A (mul (wlimb (snd (wsubb x y))) M64))
+                (sub_add_shift M64 X A hXM)
+                (compPath Nat (add A M64) (add A (mul 1 M64)) (add A (mul (wlimb (snd (wsubb x y))) M64))
+                   (cong Nat Nat (\w -> add A w) M64 (mul 1 M64) (prefl Nat M64))
+                   (cong Nat Nat (\w -> add A (mul w M64)) 1 (wlimb (snd (wsubb x y))) (sym Nat (wlimb (snd (wsubb x y))) 1 eB))))))
+     (\h0 ->
+       let A : Nat := fst x in
+       let B : Nat := fst y in
+       let hBA : Le B A := le_suc_suc B A (ble_not (suc A) B h0) in
+       let hBM64 : Le B M64 := le_of_le_suc B M64 (lt_le B M64 (snd y)) in
+       let eAdd : Path Nat (add A (sub M64 B)) (add (sub A B) M64) := add_sub_ge M64 A B hBA hBM64 in
+       let eLt : Lt (sub A B) M64 := lt_le_trans (sub A B) A M64 (sub_le A B) (le_of_le_suc A M64 (lt_le A M64 (snd x))) in
+       let eD : Path Nat (wlimb (fst (wsubb x y))) (sub A B) :=
+          compPath Nat (wlimb (fst (wsubb x y))) (mod (add A (sub M64 B)) M64) (sub A B)
+             (prefl Nat (mod (add A (sub M64 B)) M64))
+             (compPath Nat (mod (add A (sub M64 B)) M64) (mod (add (sub A B) M64) M64) (sub A B)
+                (cong Nat Nat (\w -> mod w M64) (add A (sub M64 B)) (add (sub A B) M64) eAdd)
+                (compPath Nat (mod (add (sub A B) M64) M64) (mod (sub A B) M64) (sub A B)
+                   (mod_add_mul (sub A B) 1 M63)
+                   (mod_small M63 (sub A B) eLt))) in
+       let eB0 : Path Nat (wlimb (snd (wsubb x y))) 0 :=
+          compPath Nat (wlimb (snd (wsubb x y))) (mod (ble (suc A) B) M64) 0
+             (prefl Nat (mod (ble (suc A) B) M64))
+             (compPath Nat (mod (ble (suc A) B) M64) (mod 0 M64) 0
+                (cong Nat Nat (\w -> mod w M64) (ble (suc A) B) 0 (idToPath h0))
+                (prefl Nat 0)) in
+       compPath Nat (add (wlimb (fst (wsubb x y))) B) (add (sub A B) B) (add A (mul (wlimb (snd (wsubb x y))) M64))
+          (cong Nat Nat (\w -> add w B) (wlimb (fst (wsubb x y))) (sub A B) eD)
+          (compPath Nat (add (sub A B) B) A (add A (mul (wlimb (snd (wsubb x y))) M64))
+             (sub_add_le A B hBA)
+             (sym Nat (add A (mul (wlimb (snd (wsubb x y))) M64)) A (compPath Nat (add A (mul (wlimb (snd (wsubb x y))) M64)) (add A (mul 0 M64)) A
+                (cong Nat Nat (\w -> add A (mul w M64)) (wlimb (snd (wsubb x y))) 0 eB0)
+                ((compPath Nat (add A (mul 0 M64)) (add A 0) A
+                (cong Nat Nat (\w -> add A w) (mul 0 M64) 0 (prefl Nat 0))
+                (add_zero_r A)))))))
