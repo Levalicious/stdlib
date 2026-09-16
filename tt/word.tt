@@ -1030,3 +1030,70 @@ def wsubl_val : (b x y : Word) -> Le (wlimb b) 1 ->
        (compPath Nat bo (mod bo M64) (wsubl_bo b x y)
           (sym Nat (mod bo M64) bo (mod_le_one bo (wsubl_bo_sum_le b x y hc)))
           (prefl Nat (wsubl_bo b x y))))
+
+-- the borrow counterpart of fold_step_mid: the column's law and the IH, shuffled.
+-- Pure Nat, so it can be checked on its own, and symbolic, so nothing forces a literal.
+def sub_step_mid : (dl c bl al bol V Z UB UA : Nat)
+    -> Path Nat (add (add dl c) bl) (add al (mul bol M64))
+    -> Path Nat (add Z UB) (add UA (mul c V))
+    -> Path Nat (add (add (mul dl V) Z) (add (mul bl V) UB)) (add (add (mul al V) UA) (mul bol (mul V M64))) :=
+  \dl c bl al bol V Z UB UA hcol ih -> compPath Nat
+    (add (add (mul dl V) Z) (add (mul bl V) UB))
+    (add (add (mul dl V) (mul bl V)) (add Z UB))
+    (add (add (mul al V) UA) (mul bol (mul V M64)))
+    (add_interchange (mul dl V) Z (mul bl V) UB)
+    (compPath Nat
+       (add (add (mul dl V) (mul bl V)) (add Z UB))
+       (add (mul (add dl bl) V) (add Z UB))
+       (add (add (mul al V) UA) (mul bol (mul V M64)))
+       (cong Nat Nat (\w -> add w (add Z UB)) (add (mul dl V) (mul bl V)) (mul (add dl bl) V)
+          (sym Nat (mul (add dl bl) V) (add (mul dl V) (mul bl V)) (mul_dist_r dl bl V)))
+       (compPath Nat
+          (add (mul (add dl bl) V) (add Z UB))
+          (add UA (add (mul (add dl bl) V) (mul c V)))
+          (add (add (mul al V) UA) (mul bol (mul V M64)))
+          (compPath Nat
+             (add (mul (add dl bl) V) (add Z UB))
+             (add (mul (add dl bl) V) (add UA (mul c V)))
+             (add UA (add (mul (add dl bl) V) (mul c V)))
+             (cong Nat Nat (\w -> add (mul (add dl bl) V) w) (add Z UB) (add UA (mul c V)) ih)
+             (add_swap (mul (add dl bl) V) UA (mul c V)))
+          (compPath Nat
+             (add UA (add (mul (add dl bl) V) (mul c V)))
+             (add UA (mul (add (add dl c) bl) V))
+             (add (add (mul al V) UA) (mul bol (mul V M64)))
+             (cong Nat Nat (\w -> add UA w)
+                (add (mul (add dl bl) V) (mul c V))
+                (mul (add (add dl c) bl) V)
+                (compPath Nat
+                   (add (mul (add dl bl) V) (mul c V))
+                   (mul (add (add dl bl) c) V)
+                   (mul (add (add dl c) bl) V)
+                   (sym Nat (mul (add (add dl bl) c) V) (add (mul (add dl bl) V) (mul c V)) (mul_dist_r (add dl bl) c V))
+                   (cong Nat Nat (\w -> mul w V) (add (add dl bl) c) (add (add dl c) bl)
+                      (compPath Nat (add (add dl bl) c) (add dl (add bl c)) (add (add dl c) bl)
+                         (add_assoc dl bl c)
+                         (compPath Nat (add dl (add bl c)) (add dl (add c bl)) (add (add dl c) bl)
+                            (cong Nat Nat (\w -> add dl w) (add bl c) (add c bl) (add_comm bl c))
+                            (sym Nat (add (add dl c) bl) (add dl (add c bl)) (add_assoc dl c bl)))))))
+             (compPath Nat
+                (add UA (mul (add (add dl c) bl) V))
+                (add UA (mul (add al (mul bol M64)) V))
+                (add (add (mul al V) UA) (mul bol (mul V M64)))
+                (cong Nat Nat (\w -> add UA w) (mul (add (add dl c) bl) V) (mul (add al (mul bol M64)) V)
+                   (cong Nat Nat (\w -> mul w V) (add (add dl c) bl) (add al (mul bol M64)) hcol))
+                (compPath Nat
+                   (add UA (mul (add al (mul bol M64)) V))
+                   (add UA (add (mul al V) (mul (mul bol M64) V)))
+                   (add (add (mul al V) UA) (mul bol (mul V M64)))
+                   (cong Nat Nat (\w -> add UA w) (mul (add al (mul bol M64)) V) (add (mul al V) (mul (mul bol M64) V)) (mul_dist_r al (mul bol M64) V))
+                   (compPath Nat
+                      (add UA (add (mul al V) (mul (mul bol M64) V)))
+                      (add UA (add (mul al V) (mul bol (mul V M64))))
+                      (add (add (mul al V) UA) (mul bol (mul V M64)))
+                      (cong Nat Nat (\w -> add UA w) (add (mul al V) (mul (mul bol M64) V)) (add (mul al V) (mul bol (mul V M64)))
+                         (cong Nat Nat (\w -> add (mul al V) w) (mul (mul bol M64) V) (mul bol (mul V M64))
+                            (compPath Nat (mul (mul bol M64) V) (mul bol (mul M64 V)) (mul bol (mul V M64))
+                               (mul_assoc bol M64 V)
+                               (cong Nat Nat (\w -> mul bol w) (mul M64 V) (mul V M64) (mul_comm M64 V)))))
+                      (sym Nat (add (add (mul al V) UA) (mul bol (mul V M64))) (add UA (add (mul al V) (mul bol (mul V M64)))) (compPath Nat (add (add (mul al V) UA) (mul bol (mul V M64))) (add (mul al V) (add UA (mul bol (mul V M64)))) (add UA (add (mul al V) (mul bol (mul V M64)))) (add_assoc (mul al V) UA (mul bol (mul V M64))) (add_swap (mul al V) UA (mul bol (mul V M64)))))))))))
