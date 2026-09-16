@@ -395,3 +395,7 @@ def mod_le_self : (m' x : Nat) -> Le (mod x (suc m')) x :=
      compPath Nat (add (mod x (suc m')) (mul (div x (suc m')) (suc m'))) (add (mul (div x (suc m')) (suc m')) (mod x (suc m'))) x
         (add_comm (mod x (suc m')) (mul (div x (suc m')) (suc m')))
         (divmod_spec x m'))
+
+-- suc c at most m gives c at most m - 1: the witness survives, and pred reads the suc back off it
+def le_pred_one : (c m : Nat) -> Le (suc c) m -> Le c (sub m 1) :=
+  \c m h -> let e : Nat := fst h in (e, cong Nat Nat pred (suc (add c e)) m (snd h))
