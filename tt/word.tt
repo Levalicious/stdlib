@@ -1203,6 +1203,18 @@ def wbval_zap : (k : Nat) (x : WB) -> Path Nat (wbval (wzap k x)) (wbval x) :=
           (ih (lcons 0 x))
           (wbval_lcons0 x)))
     k
+-- The chain operations the Nat layer's arithmetic is, and the C list's own primitives: the two operands padded
+-- to one length (the sum of the two, so neither pad wraps), then the column fold. The bodies are the definitions;
+-- what they owe the run time is that the chain's value is the naturals' sum (and, for the difference, monus) -
+-- those value laws are the next laws of this file. The subtraction keeps the difference only when the fold did not
+-- borrow: a borrow out of the top column means the subtrahend was the larger, and the answer is the empty chain.
+def badd (x y : WB) : WB :=
+  let n : Nat := add (wlen x) (wlen y) in
+  snd (waddGo (wzap (sub n (wlen x)) x) (wzap (sub n (wlen y)) y))
+def bsub (x y : WB) : WB :=
+  let n : Nat := add (wlen x) (wlen y) in
+  let r : Sigma Word (\_ -> WB) := wsubGo (wzap (sub n (wlen x)) x) (wzap (sub n (wlen y)) y) in
+  elim Nat (\_ -> WB) (snd r) (\_ _ -> lnil {Word}) (wlimb (fst r))
 def wlen_zap : (k : Nat) (x : WB) -> Path Nat (wlen (wzap k x)) (add k (wlen x)) :=
   \k -> elim Nat (\k -> (x : WB) -> Path Nat (wlen (wzap k x)) (add k (wlen x)))
     (\x -> prefl Nat (wlen x))
