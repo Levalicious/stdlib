@@ -1504,3 +1504,47 @@ def bsub_val : (x y : WB) -> Path Nat (wbval (bsub x y)) (sub (wbval x) (wbval y
     (compPath Nat (sub (wbval x') (wbval y')) (sub (wbval x) (wbval y')) (sub (wbval x) (wbval y))
        (cong Nat Nat (\s -> sub s (wbval y')) (wbval x') (wbval x) (wbval_zap (suc (wlen y)) x))
        (cong Nat Nat (\s -> sub (wbval x) s) (wbval y') (wbval y) (wbval_zap (suc (wlen x)) y)))
+
+-- ---- the limb-arithmetic the schoolbook multiply needs (M16b, 2026-09-16) ----
+-- A limb times a limb is two limbs, so the multiply's columns live at the M64^2 scale: div and mod unwrap
+-- there, and div never exceeds M64 when the value does not exceed M64^2.
+def le_div_mul : (a : Nat) -> Le a (mul a M64) :=
+  \a -> le_rewrite a a (add a (mul a (sub M64 1))) (mul a M64)
+     (prefl Nat a)
+     (compPath Nat (add a (mul a (sub M64 1))) (mul a (suc (sub M64 1))) (mul a M64)
+        (sym Nat (mul a (suc (sub M64 1))) (add a (mul a (sub M64 1))) (mul_suc_r a (sub M64 1)))
+        (cong Nat Nat (mul a) (suc (sub M64 1)) M64 (suc_pred_self M64 le_one_m64)))
+     (mul a (sub M64 1), prefl Nat (add a (mul a (sub M64 1))))
+def le_mul_div : (X : Nat) -> Le (mul (div X M64) M64) X :=
+  \X -> (mod X M64, divmod_spec X M63)
+def div_le_self : (X : Nat) -> Le (div X M64) X :=
+  \X -> le_trans (div X M64) (mul (div X M64) M64) X (le_div_mul (div X M64)) (le_mul_div X)
+def div_lt_of_lt : (X : Nat) -> Lt X (mul M64 M64) -> Lt (div X M64) M64 :=
+  \X H -> ble_cases (suc (div X M64)) M64 (Lt (div X M64) M64)
+    (\h1 -> le_lt (div X M64) M64 (ble_le (suc (div X M64)) M64 h1))
+    (\h0 -> elim Empty (\_ -> Lt (div X M64) M64)
+       (lt_self_absurd (mul M64 M64)
+          (lt_le_trans (mul M64 M64) (mul (div X M64) M64) (mul M64 M64)
+             (le_mul_r M64 (div X M64) M64 (le_suc_suc M64 (div X M64) (ble_not (suc (div X M64)) M64 h0)))
+             (le_trans (mul (div X M64) M64) X (mul M64 M64) (le_mul_div X) (lt_le X (mul M64 M64) H)))))
+def mod_lt_id : (X : Nat) -> Lt X M64 -> Path Nat (mod X M64) X :=
+  \X H -> ble_cases 1 (div X M64) (Path Nat (mod X M64) X)
+    (\h1 -> elim Empty (\_ -> Path Nat (mod X M64) X)
+       (lt_self_absurd M64
+          (lt_le_trans M64 (mul (div X M64) M64) M64
+             (le_rewrite (mul 1 M64) M64 (mul (div X M64) M64) (mul (div X M64) M64)
+                (prefl Nat M64) (prefl Nat (mul (div X M64) M64))
+                (le_mul_r 1 (div X M64) M64 (ble_le 1 (div X M64) h1)))
+             (le_trans (mul (div X M64) M64) X M64 (le_mul_div X) (lt_le X M64 H)))))
+    (\h0 ->
+      let d : Nat := div X M64 in
+      let hd : Path Nat d 0 := injSuc (le_antisym (suc d) 1 (ble_not 1 d h0) (d, prefl Nat (suc d))) in
+      substId (\v -> Path Nat (add (mul v M64) (mod X M64)) X) (pathToId hd) (divmod_spec X M63))
+def lt_mul_suc_l : (a c : Nat) -> Le 1 c -> Lt (mul a c) (mul (suc a) c) :=
+  \a c hc ->
+    let X : Nat := mul a c in
+    le_lt X (mul (suc a) c)
+      (le_rewrite (suc X) (add 1 X) (mul (suc a) c) (add c X)
+         (prefl Nat (suc X))
+         (prefl Nat (add c X))
+         (le_add_le 1 c X X hc (le_refl X)))
