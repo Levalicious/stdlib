@@ -940,3 +940,38 @@ def wsubl_shift : (b x y : Word) -> Path Nat
                       (add (mul b1 M64) (mul e M64))
                       (mul (add b1 e) M64)
                       (sym Nat (mul (add b1 e) M64) (add (mul b1 M64) (mul e M64)) (mul_dist_r b1 e M64))))))))
+
+-- ---- the three-term bound ----
+-- suc (m + (m - 1)) is 2m once m is at least one, and a bound below m survives pred. With le_pred_one they give the
+-- bound the borrow column's exclusion needs, stated OVER A SYMBOLIC MODULUS: at the machine word the same bound
+-- cannot be assembled from the literal lemmas, because mul_two M64 and any add with M64 in its first position walk.
+def suc_pred_self : (X : Nat) -> Le 1 X -> Path Nat (suc (sub X 1)) X :=
+  \X h -> let d : Nat := fst h in
+    compPath Nat (suc (sub X 1)) (suc d) X
+       (cong Nat Nat suc (pred X) d (sym Nat d (pred X) (cong Nat Nat pred (add 1 d) X (snd h))))
+       (snd h)
+def two_mul_pred : (m : Nat) -> Le 1 m -> Path Nat (suc (add m (sub m 1))) (mul 2 m) :=
+  \m -> elim Nat (\m -> Le 1 m -> Path Nat (suc (add m (sub m 1))) (mul 2 m))
+    (\h -> elim Empty (\_ -> Path Nat (suc (add 0 (sub 0 1))) (mul 2 0)) (lt_self_absurd 0 h))
+    (\k _ -> \h -> compPath Nat
+       (suc (add (suc k) (sub (suc k) 1)))
+       (suc (add (suc k) k))
+       (mul 2 (suc k))
+       (prefl Nat (suc (add (suc k) k)))
+       (compPath Nat (suc (add (suc k) k)) (suc (add k (suc k))) (mul 2 (suc k))
+          (cong Nat Nat suc (add (suc k) k) (add k (suc k)) (add_comm (suc k) k))
+          (sym Nat (mul 2 (suc k)) (suc (add k (suc k))) (mul_two (suc k)))))
+    m
+-- two words' worth of bound from three terms: a below m, b at most one, c below m
+def lt_add_three_le : (a b c m : Nat) -> Le (suc a) m -> Le b 1 -> Le (suc c) m -> Le (suc (add (add a b) c)) (mul 2 m) :=
+  \a b c m ha hb hc ->
+  let hab : Le (add a b) (suc a) :=
+     le_rewrite (add a b) (add a b) (add a 1) (suc a) (prefl Nat (add a b)) (add_one_r a)
+        (add_mono_l b 1 a hb) in
+  let hm : Le (add a b) m := le_trans (add a b) (suc a) m hab ha in
+  let hc' : Le c (sub m 1) := le_pred_one c m hc in
+  let hsum : Le (add (add a b) c) (add m (sub m 1)) := le_add_le (add a b) m c (sub m 1) hm hc' in
+  let hm1 : Le 1 m := le_trans 1 (suc a) m (a, prefl Nat (suc a)) ha in
+  le_rewrite (suc (add (add a b) c)) (suc (add (add a b) c)) (suc (add m (sub m 1))) (mul 2 m)
+     (prefl Nat (suc (add (add a b) c))) (two_mul_pred m hm1)
+     (le_suc_both (add (add a b) c) (add m (sub m 1)) hsum)
