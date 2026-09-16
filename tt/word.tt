@@ -1203,17 +1203,17 @@ def wbval_zap : (k : Nat) (x : WB) -> Path Nat (wbval (wzap k x)) (wbval x) :=
           (ih (lcons 0 x))
           (wbval_lcons0 x)))
     k
--- The chain operations the Nat layer's arithmetic is, and the C list's own primitives: the two operands padded
--- to one length (the sum of the two, so neither pad wraps), then the column fold. The bodies are the definitions;
+-- The chain operations the Nat layer's arithmetic is, and the C list's own primitives. Each operand is padded by
+-- one more than the OTHER's length, so both reach a common length with no subtraction, and each value stays below
+-- M64^(its own length), hence below M64^N for N the two lengths' sum - so the sum is below twice M64^N, which is
+-- at most M64^(N+1), the padded length. That is what makes the top column's carry out zero, and the value laws
+-- below are the obligations the C list's badd and bsub must meet. The bodies are the definitions;
 -- what they owe the run time is that the chain's value is the naturals' sum (and, for the difference, monus) -
 -- those value laws are the next laws of this file. The subtraction keeps the difference only when the fold did not
 -- borrow: a borrow out of the top column means the subtrahend was the larger, and the answer is the empty chain.
-def badd (x y : WB) : WB :=
-  let n : Nat := add (wlen x) (wlen y) in
-  snd (waddGo (wzap (sub n (wlen x)) x) (wzap (sub n (wlen y)) y))
+def badd (x y : WB) : WB := snd (waddGo (wzap (suc (wlen y)) x) (wzap (suc (wlen x)) y))
 def bsub (x y : WB) : WB :=
-  let n : Nat := add (wlen x) (wlen y) in
-  let r : Sigma Word (\_ -> WB) := wsubGo (wzap (sub n (wlen x)) x) (wzap (sub n (wlen y)) y) in
+  let r : Sigma Word (\_ -> WB) := wsubGo (wzap (suc (wlen y)) x) (wzap (suc (wlen x)) y) in
   elim Nat (\_ -> WB) (snd r) (\_ _ -> lnil {Word}) (wlimb (fst r))
 def wlen_zap : (k : Nat) (x : WB) -> Path Nat (wlen (wzap k x)) (add k (wlen x)) :=
   \k -> elim Nat (\k -> (x : WB) -> Path Nat (wlen (wzap k x)) (add k (wlen x)))
@@ -1265,3 +1265,70 @@ def le_two_wpow_suc : (k : Nat) -> Le 2 (wpow (suc k)) :=
        (prefl Nat M64)
        (sym Nat (wpow (suc k)) (mul (wpow k) M64) (wpow_suc k))
        (le_mul_r 1 (wpow k) M64 (one_le_wpow k)))
+
+-- ---- the padded sum's bound (M16b, 2026-09-16) ----
+-- The carry out of the padded fold is zero because the two operands, at their own lengths, are below wpow (wlen
+-- x) and wpow (wlen y), whose sum is at most wpow (wlen x + wlen y) - the pair inequality, since both powers are
+-- at least 2 - and the padded length is one above that sum. 2^A + 2^B <= 2^A * 2^B = 2^(A+B) needs u + v <= u * v
+-- for u, v >= 2, which comes from v <= 2 * (v - 1) <= u * (v - 1), the case split being the shape Le 2 v exhibits.
+-- the pair inequality's arithmetic: v >= 2 gives v <= 2 * (v - 1), hence u + v <= u * v for u, v >= 2
+def v_le_two_v : (v : Nat) -> Le 2 v -> Le v (mul 2 (sub v 1)) :=
+  \v h -> substId (\c -> Le c (mul 2 (sub c 1))) (pathToId (snd h))
+    ( (fst h),
+      compPath Nat (add (suc (suc (fst h))) (fst h)) (add (suc (fst h)) (suc (fst h))) (mul 2 (sub (suc (suc (fst h))) 1))
+        (compPath Nat (add (suc (suc (fst h))) (fst h)) (suc (add (suc (fst h)) (fst h))) (add (suc (fst h)) (suc (fst h)))
+           (prefl Nat (suc (add (suc (fst h)) (fst h))))
+           (compPath Nat (suc (add (suc (fst h)) (fst h))) (suc (add (fst h) (suc (fst h)))) (add (suc (fst h)) (suc (fst h)))
+              (cong Nat Nat suc (add (suc (fst h)) (fst h)) (add (fst h) (suc (fst h))) (add_comm (suc (fst h)) (fst h)))
+              (prefl Nat (suc (add (fst h) (suc (fst h)))))))
+        (sym Nat (mul 2 (sub (suc (suc (fst h))) 1)) (add (suc (fst h)) (suc (fst h))) (mul_two (suc (fst h)))))
+def add_le_mul_of_two : (u v : Nat) -> Le 2 u -> Le 2 v -> Le (add u v) (mul u v) :=
+  \u v hu hv ->
+    let hv1 : Le 1 v := le_trans 1 2 v (1, prefl Nat 2) hv in
+    le_rewrite (add u v) (add u v) (add u (mul u (sub v 1))) (mul u v)
+      (prefl Nat (add u v))
+      (compPath Nat (add u (mul u (sub v 1))) (mul u (suc (sub v 1))) (mul u v)
+         (sym Nat (mul u (suc (sub v 1))) (add u (mul u (sub v 1))) (mul_suc_r u (sub v 1)))
+         (cong Nat Nat (mul u) (suc (sub v 1)) v (suc_pred_self v hv1)))
+      (le_add_le u u v (mul u (sub v 1)) (le_refl u)
+         (le_trans v (mul 2 (sub v 1)) (mul u (sub v 1))
+            (v_le_two_v v hv)
+            (le_rewrite (mul 2 (sub v 1)) (mul 2 (sub v 1)) (mul u (sub v 1)) (mul u (sub v 1))
+               (prefl Nat (mul 2 (sub v 1)))
+               (prefl Nat (mul u (sub v 1)))
+               (le_mul_r 2 u (sub v 1) hu))))
+-- 2^A + 2^B <= 2^(A+B) for A, B >= 1: the two powers are at least two, so their sum is at most their product
+def wpow_pair_le : (A B : Nat) -> Le 1 A -> Le 1 B -> Le (add (wpow A) (wpow B)) (wpow (add A B)) :=
+  \A B hA hB ->
+    le_rewrite (add (wpow A) (wpow B)) (add (wpow A) (wpow B)) (mul (wpow A) (wpow B)) (wpow (add A B))
+      (prefl Nat (add (wpow A) (wpow B)))
+      (sym Nat (wpow (add A B)) (mul (wpow A) (wpow B)) (wpow_add A B))
+      (add_le_mul_of_two (wpow A) (wpow B)
+         (le_rewrite 2 2 (wpow (suc (sub A 1))) (wpow A)
+            (prefl Nat 2)
+            (cong Nat Nat wpow (suc (sub A 1)) A (suc_pred_self A hA))
+            (le_two_wpow_suc (sub A 1)))
+         (le_rewrite 2 2 (wpow (suc (sub B 1))) (wpow B)
+            (prefl Nat 2)
+            (cong Nat Nat wpow (suc (sub B 1)) B (suc_pred_self B hB))
+            (le_two_wpow_suc (sub B 1))))
+-- the padded lengths meet: both are suc (wlen x + wlen y)
+def wlen_badd_l : (x y : WB) -> Path Nat (wlen (wzap (suc (wlen y)) x)) (suc (add (wlen x) (wlen y))) :=
+  \x y -> compPath Nat (wlen (wzap (suc (wlen y)) x)) (add (suc (wlen y)) (wlen x)) (suc (add (wlen x) (wlen y)))
+    (wlen_zap (suc (wlen y)) x)
+    (compPath Nat (add (suc (wlen y)) (wlen x)) (suc (add (wlen y) (wlen x))) (suc (add (wlen x) (wlen y)))
+       (prefl Nat (suc (add (wlen y) (wlen x))))
+       (cong Nat Nat suc (add (wlen y) (wlen x)) (add (wlen x) (wlen y)) (add_comm (wlen y) (wlen x))))
+def wlen_badd_r : (x y : WB) -> Path Nat (wlen (wzap (suc (wlen x)) y)) (suc (add (wlen x) (wlen y))) :=
+  \x y -> compPath Nat (wlen (wzap (suc (wlen x)) y)) (add (suc (wlen x)) (wlen y)) (suc (add (wlen x) (wlen y)))
+    (wlen_zap (suc (wlen x)) y)
+    (prefl Nat (suc (add (wlen x) (wlen y))))
+-- one padded operand stays below the power of its own length (its value bound, transported along the zap)
+def badd_lt_l : (x y : WB) -> Lt (wbval (wzap (suc (wlen y)) x)) (wpow (wlen x)) :=
+  \x y -> substId (\v -> Lt v (wpow (wlen x)))
+    (pathToId (sym Nat (wbval (wzap (suc (wlen y)) x)) (wbval x) (wbval_zap (suc (wlen y)) x)))
+    (wbval_lt_wpow x)
+def badd_lt_r : (x y : WB) -> Lt (wbval (wzap (suc (wlen x)) y)) (wpow (wlen y)) :=
+  \x y -> substId (\v -> Lt v (wpow (wlen y)))
+    (pathToId (sym Nat (wbval (wzap (suc (wlen x)) y)) (wbval y) (wbval_zap (suc (wlen x)) y)))
+    (wbval_lt_wpow y)
