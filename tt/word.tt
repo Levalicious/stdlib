@@ -975,3 +975,11 @@ def lt_add_three_le : (a b c m : Nat) -> Le (suc a) m -> Le b 1 -> Le (suc c) m 
   le_rewrite (suc (add (add a b) c)) (suc (add (add a b) c)) (suc (add m (sub m 1))) (mul 2 m)
      (prefl Nat (suc (add (add a b) c))) (two_mul_pred m hm1)
      (le_suc_both (add (add a b) c) (add m (sub m 1)) hsum)
+
+-- the borrow column's exclusion, upper half: (digit + borrow in) + y is within two words of the limbs'
+-- own bounds, by the three-term bound stated over a symbolic modulus.
+def wsubl_bo_upper : (b x y : Word) -> Le (wlimb b) 1 ->
+    Le (suc (add (add (wsubl_digit b x y) (fst b)) (fst y))) (mul 2 M64) :=
+  \b x y hc -> lt_add_three_le (wsubl_digit b x y) (fst b) (fst y) M64
+     (lt_le (fst (fst (wsubb (fst (wsubb x y)) b))) M64 (snd (fst (wsubb (fst (wsubb x y)) b)))) hc
+     (lt_le (fst y) M64 (snd y))
