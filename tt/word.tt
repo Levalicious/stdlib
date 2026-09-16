@@ -1759,3 +1759,21 @@ def bpow_val : (x : WB) (k : Nat) -> Path Nat (wbval (bpow x k)) (pow (wbval x) 
        (bmul_val x (bpow x j))
        (cong Nat Nat (mul (wbval x)) (wbval (bpow x j)) (pow (wbval x) j) ih))
     k
+
+-- ---- the chain division (M16b, 2026-09-16) ----
+-- The quotient recursion with the dividend's VALUE as the fuel: every step that recurses has already dropped
+-- below y, so the structural elim on the fuel is the measure and no well-founded recursion is needed. The
+-- convention is the kernel's (and the runtime's): x / 0 = 0, x % 0 = x.
+def bdivmodGo (y : WB) (k : Nat) (x : WB) : Sigma WB (\_ -> WB) :=
+  elim Nat (\_ -> WB -> Sigma WB (\_ -> WB))
+    (\x -> (lnil {Word}, x))
+    (\j ih -> \x ->
+       ble_cases (suc (wbval x)) (wbval y) (Sigma WB (\_ -> WB))
+         (\_ -> (lnil {Word}, x))
+         (\_ -> let qr : Sigma WB (\_ -> WB) := ih (bsub x y) in
+                (badd (fst qr) wone, snd qr)))
+    k x
+def bdivmod (x y : WB) : Sigma WB (\_ -> WB) :=
+  ble_cases (suc (wbval y)) 1 (Sigma WB (\_ -> WB))
+    (\_ -> (lnil {Word}, x))
+    (\_ -> bdivmodGo y (wbval x) x)
