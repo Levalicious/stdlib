@@ -1179,3 +1179,38 @@ def wsubGo_val : (x y : WB) -> Path Nat (wlen x) (wlen y) -> WSubInv x y :=
               cong Nat Nat suc (wlen (snd r)) (wlen as) (snd (snd ihv)) ) ))
        y)
     x
+
+-- ---- the pad, and the value laws it keeps (M16b, 2026-09-16) ----
+-- A limb chain reads most significant limb first (waddGo's carry comes back from the tail, which is the low end),
+-- so padding a chain to a length is PREPENDING zero limbs: the value is untouched, and the length grows by one per
+-- limb. The chain operations that need both operands at one length (the addition and subtraction of the Nat layer)
+-- go through this.
+def wzap (k : Nat) (x : WB) : WB := elim Nat (\_ -> WB -> WB) (\x -> x) (\_ ih -> \x -> ih (lcons 0 x)) k x
+def mul_zero_l : (n : Nat) -> Path Nat (mul 0 n) 0 :=
+  \n -> compPath Nat (mul 0 n) (mul n 0) 0 (mul_comm 0 n) (mul_zero_r n)
+def wbval_lcons0 : (x : WB) -> Path Nat (wbval (lcons 0 x)) (wbval x) :=
+  \x -> compPath Nat (wbval (lcons 0 x)) (add (mul 0 (wpow (wlen x))) (wbval x)) (wbval x)
+    (wbval_cons 0 x)
+    (compPath Nat (add (mul 0 (wpow (wlen x))) (wbval x)) (add 0 (wbval x)) (wbval x)
+       (cong Nat Nat (\w -> add w (wbval x)) (mul 0 (wpow (wlen x))) 0 (mul_zero_l (wpow (wlen x))))
+       (add_zero_l (wbval x)))
+def wbval_zap : (k : Nat) (x : WB) -> Path Nat (wbval (wzap k x)) (wbval x) :=
+  \k -> elim Nat (\k -> (x : WB) -> Path Nat (wbval (wzap k x)) (wbval x))
+    (\x -> prefl Nat (wbval x))
+    (\k ih -> \x -> compPath Nat (wbval (wzap (suc k) x)) (wbval (wzap k (lcons 0 x))) (wbval x)
+       (prefl Nat (wbval (wzap k (lcons 0 x))))
+       (compPath Nat (wbval (wzap k (lcons 0 x))) (wbval (lcons 0 x)) (wbval x)
+          (ih (lcons 0 x))
+          (wbval_lcons0 x)))
+    k
+def wlen_zap : (k : Nat) (x : WB) -> Path Nat (wlen (wzap k x)) (add k (wlen x)) :=
+  \k -> elim Nat (\k -> (x : WB) -> Path Nat (wlen (wzap k x)) (add k (wlen x)))
+    (\x -> prefl Nat (wlen x))
+    (\k ih -> \x -> compPath Nat (wlen (wzap (suc k) x)) (wlen (wzap k (lcons 0 x))) (suc (add k (wlen x)))
+       (prefl Nat (wlen (wzap k (lcons 0 x))))
+       (compPath Nat (wlen (wzap k (lcons 0 x))) (add k (wlen (lcons 0 x))) (suc (add k (wlen x)))
+          (ih (lcons 0 x))
+          (compPath Nat (add k (wlen (lcons 0 x))) (add k (suc (wlen x))) (suc (add k (wlen x)))
+             (cong Nat Nat (\w -> add k w) (wlen (lcons 0 x)) (suc (wlen x)) (wlen_cons 0 x))
+             (add_suc_r k (wlen x)))))
+    k

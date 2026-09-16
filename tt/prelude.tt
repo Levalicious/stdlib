@@ -260,6 +260,10 @@ def dmiter : Nat -> Nat -> Sigma Nat (\_ -> Nat) :=
   \m x -> elim Nat (\_ -> Sigma Nat (\_ -> Nat)) (0, 0) (\m' _ -> siter m' x) m
 native div : Nat -> Nat -> Nat := \x m -> if01 (beq m 0) 0 (fst (dmiter m x))
 native mod : Nat -> Nat -> Nat := \x m -> if01 (beq m 0) x (snd (dmiter m x))
+-- Lev's rule: minv x y = x ^ (y - 2) mod y. The kernel computes the exponent's and the division's answer directly
+-- on the limbs; the body is the fallback, so the specification is definitional and the law below holds by prefl.
+native minv : Nat -> Nat -> Nat := \x y -> mod (pow x (sub y 2)) y
+def minv_spec : (x y : Nat) -> Path Nat (minv x y) (mod (pow x (sub y 2)) y) := \x y -> prefl Nat (mod (pow x (sub y 2)) y)
 def discreteNat : Discrete Nat := \m -> elim Nat (\m -> (n : Nat) -> Dec (Path Nat m n))
   (\n -> elim Nat (\n -> Dec (Path Nat zero n)) (yes (\_ -> zero)) (\k _ -> no (\p -> znots p)) n)
   (\m ihm -> \n -> elim Nat (\n -> Dec (Path Nat (suc m) n)) (no (\p -> snotz p))
