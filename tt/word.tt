@@ -997,3 +997,36 @@ def wsubl_bo_lower : (b x y : Word) -> Le 2 (add (wborrow x y) (wborrow (fst (ws
         (add (fst x) (mul (add (wborrow x y) (wborrow (fst (wsubb x y)) b)) M64))
         (le_mul_r 2 (add (wborrow x y) (wborrow (fst (wsubb x y)) b)) M64 h2)
         (fst x, add_comm (mul (add (wborrow x y) (wborrow (fst (wsubb x y)) b)) M64) (fst x)))
+
+-- ---- the borrow column's value law ----
+-- The column subtracts twice, and this is what it is worth: (digit + borrow in) + y = x + borrow out * M64. It is the
+-- shift with the borrow out's mod unwrapped, and the unwrap is licensed by the exclusion - the two single-subtraction
+-- borrows cannot both be one, or the column's total would reach two words while the limbs cap it below.
+-- the exclusion, as the fact about the two borrows' sum that both the bound and the law want
+def wsubl_bo_sum_le : (b x y : Word) -> Le (wlimb b) 1 ->
+    Le (add (wborrow x y) (wborrow (fst (wsubb x y)) b)) 1 :=
+  \b x y hc ->
+  let bo : Nat := add (wborrow x y) (wborrow (fst (wsubb x y)) b) in
+  let Z : Nat := add (add (wsubl_digit b x y) (fst b)) (fst y) in
+  le_one_of_not_le_two bo
+     (\h2 -> lt_self_absurd Z
+        (le_trans (suc Z) (mul 2 M64) Z (wsubl_bo_upper b x y hc) (wsubl_bo_lower b x y h2)))
+def wsubl_bo_le : (b x y : Word) -> Le (wlimb b) 1 -> Le (wsubl_bo b x y) 1 :=
+  \b x y hc ->
+  let bo : Nat := add (wborrow x y) (wborrow (fst (wsubb x y)) b) in
+  let hle : Le bo 1 := wsubl_bo_sum_le b x y hc in
+  le_rewrite bo (mod bo M64) 1 1 (sym Nat (mod bo M64) bo (mod_le_one bo hle)) (prefl Nat 1) hle
+-- the column's value law: digit + borrow in, plus y, is x plus the borrow out's weight
+def wsubl_val : (b x y : Word) -> Le (wlimb b) 1 ->
+    Path Nat (add (add (wsubl_digit b x y) (fst b)) (fst y)) (add (fst x) (mul (wsubl_bo b x y) M64)) :=
+  \b x y hc ->
+  let bo : Nat := add (wborrow x y) (wborrow (fst (wsubb x y)) b) in
+  compPath Nat
+    (add (add (wsubl_digit b x y) (fst b)) (fst y))
+    (add (fst x) (mul bo M64))
+    (add (fst x) (mul (wsubl_bo b x y) M64))
+    (wsubl_shift b x y)
+    (cong Nat Nat (\w -> add (fst x) (mul w M64)) bo (wsubl_bo b x y)
+       (compPath Nat bo (mod bo M64) (wsubl_bo b x y)
+          (sym Nat (mod bo M64) bo (mod_le_one bo (wsubl_bo_sum_le b x y hc)))
+          (prefl Nat (wsubl_bo b x y))))
