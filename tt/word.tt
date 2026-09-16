@@ -1097,3 +1097,85 @@ def sub_step_mid : (dl c bl al bol V Z UB UA : Nat)
                                (mul_assoc bol M64 V)
                                (cong Nat Nat (\w -> mul bol w) (mul M64 V) (mul V M64) (mul_comm M64 V)))))
                       (sym Nat (add (add (mul al V) UA) (mul bol (mul V M64))) (add UA (add (mul al V) (mul bol (mul V M64)))) (compPath Nat (add (add (mul al V) UA) (mul bol (mul V M64))) (add (mul al V) (add UA (mul bol (mul V M64)))) (add UA (add (mul al V) (mul bol (mul V M64)))) (add_assoc (mul al V) UA (mul bol (mul V M64))) (add_swap (mul al V) UA (mul bol (mul V M64)))))))))))
+
+-- ---- the borrow scan's law ----
+-- The step is wstep_val's shape (the two cons laws and the weight alignment) around sub_step_mid, which is the
+-- column's law and the IH shuffled. The invariant carries the value law in the mirror orientation - z + y =
+-- x + borrow * 2^(64 len) - the borrow out, and the result's length; wsubl_bo_le is what hands the borrow to
+-- the next column, exactly as the carry's bound did.
+-- the borrow scan's step: the limb-level rewrites (two cons laws, the weight alignment) around sub_step_mid, which
+-- is the column's law and the IH shuffled. The mirror of wstep_val.
+def wsubGo_step_val : (a b : Word) (as bs : WB) (r : Sigma Word (\_ -> WB))
+    -> Le (wlimb (fst r)) 1
+    -> Path Nat (wlen as) (wlen bs)
+    -> Path Nat (wlen (snd r)) (wlen as)
+    -> Path Nat (add (wbval (snd r)) (wbval bs)) (add (wbval as) (mul (wlimb (fst r)) (wpow (wlen (snd r)))))
+    -> Path Nat (add (wbval (lcons (snd (wsubl (fst r) a b)) (snd r))) (wbval (lcons b bs)))
+               (add (wbval (lcons a as)) (mul (wlimb (fst (wsubl (fst r) a b))) (wpow (wlen (lcons (snd (wsubl (fst r) a b)) (snd r)))))) :=
+  \a b as bs r hc hlen hL ihv ->
+  let c : Nat := wlimb (fst r) in
+  let z : WB := snd r in
+  let V : Nat := wpow (wlen z) in
+  let P : Nat := wpow (wlen as) in
+  let Q : Nat := wpow (wlen bs) in
+  let hPV : Path Nat V P := cong Nat Nat wpow (wlen z) (wlen as) hL in
+  let hVQ : Path Nat V Q := compPath Nat V P Q hPV (cong Nat Nat wpow (wlen as) (wlen bs) hlen) in
+  let d : Word := snd (wsubl (fst r) a b) in
+  let bo : Word := fst (wsubl (fst r) a b) in
+  let A1 : Nat := mul (wlimb a) V in
+  let Z : Nat := wbval z in
+  let UA : Nat := wbval as in
+  let UB : Nat := wbval bs in
+  let hcol : Path Nat (add (add (wlimb d) c) (wlimb b)) (add (wlimb a) (mul (wlimb bo) M64)) :=
+     wsubl_val (fst r) a b hc in
+  compPath Nat
+    (add (wbval (lcons d z)) (wbval (lcons b bs)))
+    (add (add (mul (wlimb d) V) Z) (add (mul (wlimb b) V) UB))
+    (add (wbval (lcons a as)) (mul (wlimb bo) (wpow (wlen (lcons d z)))))
+    (compPath Nat
+       (add (wbval (lcons d z)) (wbval (lcons b bs)))
+       (add (add (mul (wlimb d) (wpow (wlen z))) (wbval z)) (add (mul (wlimb b) Q) (wbval bs)))
+       (add (add (mul (wlimb d) V) Z) (add (mul (wlimb b) V) UB))
+       (compPath Nat
+          (add (wbval (lcons d z)) (wbval (lcons b bs)))
+          (add (add (mul (wlimb d) (wpow (wlen z))) (wbval z)) (wbval (lcons b bs)))
+          (add (add (mul (wlimb d) (wpow (wlen z))) (wbval z)) (add (mul (wlimb b) Q) (wbval bs)))
+          (cong Nat Nat (\w -> add w (wbval (lcons b bs))) (wbval (lcons d z)) (add (mul (wlimb d) (wpow (wlen z))) (wbval z)) (wbval_cons d z))
+          (cong Nat Nat (\w -> add (add (mul (wlimb d) (wpow (wlen z))) (wbval z)) w) (wbval (lcons b bs)) (add (mul (wlimb b) Q) (wbval bs)) (wbval_cons b bs)))
+       (cong Nat Nat (\w -> add (add (mul (wlimb d) (wpow (wlen z))) (wbval z)) (add (mul (wlimb b) w) (wbval bs))) Q V (sym Nat V Q hVQ)))
+    (compPath Nat
+       (add (add (mul (wlimb d) V) Z) (add (mul (wlimb b) V) UB))
+       (add (add A1 UA) (mul (wlimb bo) (mul V M64)))
+       (add (wbval (lcons a as)) (mul (wlimb bo) (wpow (wlen (lcons d z)))))
+       (sub_step_mid (wlimb d) c (wlimb b) (wlimb a) (wlimb bo) V Z UB UA hcol ihv)
+       (compPath Nat
+          (add (add A1 UA) (mul (wlimb bo) (mul V M64)))
+          (add (wbval (lcons a as)) (mul (wlimb bo) (mul V M64)))
+          (add (wbval (lcons a as)) (mul (wlimb bo) (wpow (wlen (lcons d z)))))
+          (cong Nat Nat (\w -> add w (mul (wlimb bo) (mul V M64))) (add A1 UA) (wbval (lcons a as))
+             (compPath Nat (add A1 UA) (add (mul (wlimb a) P) UA) (wbval (lcons a as))
+                (cong Nat Nat (\w -> add w UA) A1 (mul (wlimb a) P) (cong Nat Nat (\w -> mul (wlimb a) w) V P hPV))
+                (sym Nat (wbval (lcons a as)) (add (mul (wlimb a) P) (wbval as)) (wbval_cons a as))))
+          (cong Nat Nat (\w -> add (wbval (lcons a as)) (mul (wlimb bo) w)) (mul V M64) (wpow (wlen (lcons d z))) (prefl Nat (wpow (wlen (lcons d z)))))))
+-- what the borrow scan is worth, bundled: the value law in the mirror orientation, the borrow out, and the length
+def WSubInv (x y : WB) : U :=
+  Sigma (Path Nat (add (wbval (snd (wsubGo x y))) (wbval y)) (add (wbval x) (mul (wlimb (fst (wsubGo x y))) (wpow (wlen (snd (wsubGo x y)))))))
+    (\_ -> Sigma (Le (wlimb (fst (wsubGo x y))) 1) (\_ -> Path Nat (wlen (snd (wsubGo x y))) (wlen x)))
+def wsubGo_val : (x y : WB) -> Path Nat (wlen x) (wlen y) -> WSubInv x y :=
+  \x -> elim List (\x -> (y : WB) -> Path Nat (wlen x) (wlen y) -> WSubInv x y)
+    (\y -> elim List (\y -> Path Nat (wlen (lnil {Word})) (wlen y) -> WSubInv (lnil {Word}) y)
+       (\h -> (prefl Nat 0, ((1, prefl Nat 1), prefl Nat 0)))
+       (\b bs _ h -> elim Empty (\_ -> WSubInv (lnil {Word}) (lcons b bs)) (znots h))
+       y)
+    (\a as iha -> \y -> elim List (\y -> Path Nat (wlen (lcons a as)) (wlen y) -> WSubInv (lcons a as) y)
+       (\h -> elim Empty (\_ -> WSubInv (lcons a as) (lnil {Word})) (snotz h))
+       (\b bs ihb h ->
+          let hs : Path Nat (wlen as) (wlen bs) := injSuc h in
+          let r : Sigma Word (\_ -> WB) := wsubGo as bs in
+          let ihv : WSubInv as bs := iha bs hs in
+          let hc : Le (wlimb (fst r)) 1 := fst (snd ihv) in
+          ( wsubGo_step_val a b as bs r hc hs (snd (snd ihv)) (fst ihv),
+            ( wsubl_bo_le (fst r) a b hc,
+              cong Nat Nat suc (wlen (snd r)) (wlen as) (snd (snd ihv)) ) ))
+       y)
+    x
