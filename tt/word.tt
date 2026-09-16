@@ -884,3 +884,59 @@ def wsubb_val : (x y : Word) -> Path Nat (add (wlimb (fst (wsubb x y))) (fst y))
                 ((compPath Nat (add A (mul 0 M64)) (add A 0) A
                 (cong Nat Nat (\w -> add A w) (mul 0 M64) 0 (prefl Nat 0))
                 (add_zero_r A)))))))
+
+-- ---- the borrow column's identity ----
+-- A single wsubb gives a digit and a borrow, named here so the column's algebra stays readable. The column subtracts
+-- twice - the borrow in from the first digit - and its identity is (digit + borrow in) + y = x + (b1 + b2) * M64,
+-- with the borrow out's mod still unwrapped: that is wsubl_val's job, and it needs the two single-subtraction
+-- borrows bounded first (they cannot both be one, or the column's total would exceed two machine words).
+-- the two things a single wsubb gives: its digit and its borrow, named
+def wdigit (x y : Word) : Nat := wlimb (fst (wsubb x y))
+def wborrow (x y : Word) : Nat := wlimb (snd (wsubb x y))
+-- and the column's own: the digit of the second subtraction, and the borrow it leaves
+def wsubl_digit (b x y : Word) : Nat := wdigit (fst (wsubb x y)) b
+def wsubl_bo (b x y : Word) : Nat := wlimb (fst (wsubl b x y))
+-- the column's identity, before the borrow out's mod is unwrapped:
+-- (digit + borrow in) + y = x + (the two single-subtraction borrows, summed) * M64
+def wsubl_shift : (b x y : Word) -> Path Nat
+    (add (add (wsubl_digit b x y) (fst b)) (fst y))
+    (add (fst x) (mul (add (wborrow x y) (wborrow (fst (wsubb x y)) b)) M64)) :=
+  \b x y ->
+  let d1 : Nat := wdigit x y in
+  let e : Nat := wborrow (fst (wsubb x y)) b in
+  let c : Nat := fst b in
+  let b1 : Nat := wborrow x y in
+  compPath Nat
+    (add (add (wsubl_digit b x y) c) (fst y))
+    (add (add d1 (mul e M64)) (fst y))
+    (add (fst x) (mul (add b1 e) M64))
+    (cong Nat Nat (\w -> add w (fst y)) (add (wsubl_digit b x y) c) (add d1 (mul e M64)) (wsubb_val (fst (wsubb x y)) b))
+    (compPath Nat
+       (add (add d1 (mul e M64)) (fst y))
+       (add d1 (add (mul e M64) (fst y)))
+       (add (fst x) (mul (add b1 e) M64))
+       (add_assoc d1 (mul e M64) (fst y))
+       (compPath Nat
+          (add d1 (add (mul e M64) (fst y)))
+          (add d1 (add (fst y) (mul e M64)))
+          (add (fst x) (mul (add b1 e) M64))
+          (cong Nat Nat (\w -> add d1 w) (add (mul e M64) (fst y)) (add (fst y) (mul e M64)) (add_comm (mul e M64) (fst y)))
+          (compPath Nat
+             (add d1 (add (fst y) (mul e M64)))
+             (add (add d1 (fst y)) (mul e M64))
+             (add (fst x) (mul (add b1 e) M64))
+             (sym Nat (add (add d1 (fst y)) (mul e M64)) (add d1 (add (fst y) (mul e M64))) (add_assoc d1 (fst y) (mul e M64)))
+             (compPath Nat
+                (add (add d1 (fst y)) (mul e M64))
+                (add (add (fst x) (mul b1 M64)) (mul e M64))
+                (add (fst x) (mul (add b1 e) M64))
+                (cong Nat Nat (\w -> add w (mul e M64)) (add d1 (fst y)) (add (fst x) (mul b1 M64)) (wsubb_val x y))
+                (compPath Nat
+                   (add (add (fst x) (mul b1 M64)) (mul e M64))
+                   (add (fst x) (add (mul b1 M64) (mul e M64)))
+                   (add (fst x) (mul (add b1 e) M64))
+                   (add_assoc (fst x) (mul b1 M64) (mul e M64))
+                   (cong Nat Nat (\w -> add (fst x) w)
+                      (add (mul b1 M64) (mul e M64))
+                      (mul (add b1 e) M64)
+                      (sym Nat (mul (add b1 e) M64) (add (mul b1 M64) (mul e M64)) (mul_dist_r b1 e M64))))))))
