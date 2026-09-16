@@ -1332,3 +1332,91 @@ def badd_lt_r : (x y : WB) -> Lt (wbval (wzap (suc (wlen x)) y)) (wpow (wlen y))
   \x y -> substId (\v -> Lt v (wpow (wlen y)))
     (pathToId (sym Nat (wbval (wzap (suc (wlen x)) y)) (wbval y) (wbval_zap (suc (wlen x)) y)))
     (wbval_lt_wpow y)
+
+-- wpow is monotone in the exponent, over a symbolic base (wpow_add)
+def wpow_add_le : (a d : Nat) -> Le (wpow a) (wpow (add a d)) :=
+  \a d ->
+    let w : Nat := mul (wpow a) (sub (wpow d) 1) in
+    ( w,
+      compPath Nat (add (wpow a) w) (mul (wpow a) (wpow d)) (wpow (add a d))
+        (compPath Nat (add (wpow a) w) (mul (wpow a) (suc (sub (wpow d) 1))) (mul (wpow a) (wpow d))
+           (sym Nat (mul (wpow a) (suc (sub (wpow d) 1))) (add (wpow a) w) (mul_suc_r (wpow a) (sub (wpow d) 1)))
+           (cong Nat Nat (\u -> mul (wpow a) u) (suc (sub (wpow d) 1)) (wpow d) (suc_pred_self (wpow d) (one_le_wpow d))))
+        (sym Nat (wpow (add a d)) (mul (wpow a) (wpow d)) (wpow_add a d)) )
+def wpow_le : (a b : Nat) -> Le a b -> Le (wpow a) (wpow b) :=
+  \a b h -> substId (\c -> Le (wpow a) (wpow c)) (pathToId (snd h)) (wpow_add_le a (fst h))
+
+def badd_sum_lt_nill : (y : WB) -> Lt (add (wbval (wzap (suc (wlen y)) (lnil {Word}))) (wbval (wzap (suc (wlen (lnil {Word}))) y))) (wpow (suc (add (wlen (lnil {Word})) (wlen y)))) :=
+  \y -> lt_le_trans (add (wbval (wzap (suc (wlen y)) (lnil {Word}))) (wbval (wzap (suc (wlen (lnil {Word}))) y))) (wpow (wlen y)) (wpow (suc (add (wlen (lnil {Word})) (wlen y))))
+    (substId (\s -> Lt s (wpow (wlen y)))
+       (pathToId (sym Nat (wbval (wzap (suc (wlen (lnil {Word}))) y)) (add (wbval (wzap (suc (wlen y)) (lnil {Word}))) (wbval (wzap (suc (wlen (lnil {Word}))) y)))
+          (compPath Nat (add (wbval (wzap (suc (wlen y)) (lnil {Word}))) (wbval (wzap (suc (wlen (lnil {Word}))) y))) (add 0 (wbval (wzap (suc (wlen (lnil {Word}))) y))) (wbval (wzap (suc (wlen (lnil {Word}))) y))
+             (cong Nat Nat (\s -> add s (wbval (wzap (suc (wlen (lnil {Word}))) y))) (wbval (wzap (suc (wlen y)) (lnil {Word}))) 0 (compPath Nat (wbval (wzap (suc (wlen y)) (lnil {Word}))) (wbval (lnil {Word})) 0 (wbval_zap (suc (wlen y)) (lnil {Word})) (prefl Nat 0)))
+             (add_zero_l (wbval (wzap (suc (wlen (lnil {Word}))) y))))))
+       (badd_lt_r (lnil {Word}) y))
+    (wpow_le (wlen y) (suc (add (wlen (lnil {Word})) (wlen y))) (1, add_one_r (wlen y)))
+def badd_sum_lt_nilr : (u : WB) -> Lt (add (wbval (wzap (suc (wlen (lnil {Word}))) u)) (wbval (wzap (suc (wlen u)) (lnil {Word})))) (wpow (suc (add (wlen u) (wlen (lnil {Word}))))) :=
+  \u -> lt_le_trans (add (wbval (wzap (suc (wlen (lnil {Word}))) u)) (wbval (wzap (suc (wlen u)) (lnil {Word})))) (wpow (wlen u)) (wpow (suc (add (wlen u) (wlen (lnil {Word})))))
+    (substId (\s -> Lt s (wpow (wlen u)))
+       (pathToId (sym Nat (wbval (wzap (suc (wlen (lnil {Word}))) u)) (add (wbval (wzap (suc (wlen (lnil {Word}))) u)) (wbval (wzap (suc (wlen u)) (lnil {Word}))))
+          (compPath Nat (add (wbval (wzap (suc (wlen (lnil {Word}))) u)) (wbval (wzap (suc (wlen u)) (lnil {Word})))) (add (wbval (wzap (suc (wlen (lnil {Word}))) u)) 0) (wbval (wzap (suc (wlen (lnil {Word}))) u))
+             (cong Nat Nat (\s -> add (wbval (wzap (suc (wlen (lnil {Word}))) u)) s) (wbval (wzap (suc (wlen u)) (lnil {Word}))) 0 (compPath Nat (wbval (wzap (suc (wlen u)) (lnil {Word}))) (wbval (lnil {Word})) 0 (wbval_zap (suc (wlen u)) (lnil {Word})) (prefl Nat 0)))
+             (add_zero_r (wbval (wzap (suc (wlen (lnil {Word}))) u))))))
+       (badd_lt_l u (lnil {Word})))
+    (wpow_le (wlen u) (suc (add (wlen u) (wlen (lnil {Word})))) (1, (compPath Nat (add (wlen u) 1) (suc (wlen u)) (suc (add (wlen u) (wlen (lnil {Word})))) (add_one_r (wlen u)) (cong Nat Nat suc (wlen u) (add (wlen u) (wlen (lnil {Word}))) (sym Nat (add (wlen u) (wlen (lnil {Word}))) (wlen u) (add_zero_r (wlen u)))))))
+def badd_sum_lt_lr : (l : Word) (r : WB) -> (y : WB) -> Lt (add (wbval (wzap (suc (wlen y)) (lcons l r))) (wbval (wzap (suc (wlen (lcons l r))) y))) (wpow (suc (add (wlen (lcons l r)) (wlen y)))) :=
+  \l r -> elim List (\w -> Lt (add (wbval (wzap (suc (wlen w)) (lcons l r))) (wbval (wzap (suc (wlen (lcons l r))) w))) (wpow (suc (add (wlen (lcons l r)) (wlen w)))))
+    (badd_sum_lt_nilr (lcons l r))
+    (\k s ih -> lt_le_trans (add (wbval (wzap (suc (wlen (lcons k s))) (lcons l r))) (wbval (wzap (suc (wlen (lcons l r))) (lcons k s)))) (wpow (add (wlen (lcons l r)) (wlen (lcons k s)))) (wpow (suc (add (wlen (lcons l r)) (wlen (lcons k s)))))
+       (lt_le_trans (add (wbval (wzap (suc (wlen (lcons k s))) (lcons l r))) (wbval (wzap (suc (wlen (lcons l r))) (lcons k s)))) (add (wpow (wlen (lcons l r))) (wpow (wlen (lcons k s)))) (wpow (add (wlen (lcons l r)) (wlen (lcons k s))))
+          (lt_add_mono_l (wbval (wzap (suc (wlen (lcons l r))) (lcons k s))) (wpow (wlen (lcons k s))) (wbval (wzap (suc (wlen (lcons k s))) (lcons l r)))
+             (lt_add_mono_r (wbval (wzap (suc (wlen (lcons k s))) (lcons l r))) (wpow (wlen (lcons l r))) (wbval (wzap (suc (wlen (lcons l r))) (lcons k s))) (badd_lt_l (lcons l r) (lcons k s))))
+          (wpow_pair_le (wlen (lcons l r)) (wlen (lcons k s)) (wlen r, prefl Nat (suc (wlen r))) (wlen s, prefl Nat (suc (wlen s)))))
+       (wpow_le (add (wlen (lcons l r)) (wlen (lcons k s))) (suc (add (wlen (lcons l r)) (wlen (lcons k s)))) (1, add_one_r (add (wlen (lcons l r)) (wlen (lcons k s))))))
+def badd_sum_lt : (x y : WB) -> Lt (add (wbval (wzap (suc (wlen y)) x)) (wbval (wzap (suc (wlen x)) y))) (wpow (suc (add (wlen x) (wlen y)))) :=
+  \x y -> elim List (\u -> Lt (add (wbval (wzap (suc (wlen y)) u)) (wbval (wzap (suc (wlen u)) y))) (wpow (suc (add (wlen u) (wlen y)))))
+    (badd_sum_lt_nill y)
+    (\l r ih -> badd_sum_lt_lr l r y)
+    x
+
+-- the value law of the padded add: the sum bounds the carry out at zero, so the fold is the plain sum
+def le_add_inner : (a b c : Nat) -> Le a (add b (add a c)) :=
+  \a b c -> (add b c, compPath Nat (add a (add b c)) (add (add a b) c) (add b (add a c))
+     (sym Nat (add (add a b) c) (add a (add b c)) (add_assoc a b c))
+     (compPath Nat (add (add a b) c) (add (add b a) c) (add b (add a c))
+        (cong Nat Nat (\s -> add s c) (add a b) (add b a) (add_comm a b))
+        (add_assoc b a c)))
+def badd_val : (x y : WB) -> Path Nat (wbval (badd x y)) (add (wbval x) (wbval y)) :=
+  \x y ->
+  let x' : WB := wzap (suc (wlen y)) x in
+  let y' : WB := wzap (suc (wlen x)) y in
+  let N : Nat := suc (add (wlen x) (wlen y)) in
+  let hs : Path Nat (wlen x') (wlen y') :=
+     compPath Nat (wlen x') N (wlen y') (wlen_badd_l x y) (sym Nat (wlen y') N (wlen_badd_r x y)) in
+  let inv : WInv x' y' := waddGo_val x' y' hs in
+  let z : WB := snd (waddGo x' y') in
+  let c : Word := fst (waddGo x' y') in
+  let e1 : Path Nat (add (wbval z) (mul (wlimb c) (wpow (wlen z)))) (add (wbval x') (wbval y')) := fst inv in
+  let hz : Path Nat (wlen z) (wlen x') := snd (snd inv) in
+  let hK : Path Nat (wpow (wlen z)) (wpow N) :=
+     cong Nat Nat wpow (wlen z) N (compPath Nat (wlen z) (wlen x') N hz (wlen_badd_l x y)) in
+  let bd : Lt (add (wbval x') (wbval y')) (wpow (wlen z)) :=
+     substId (\v -> Lt (add (wbval x') (wbval y')) v) (pathToId (sym Nat (wpow (wlen z)) (wpow N) hK)) (badd_sum_lt x y) in
+  let goal : Path Nat (wbval z) (add (wbval x') (wbval y')) :=
+    elim Nat (\m -> Path Nat (wlimb c) m -> Path Nat (wbval z) (add (wbval x') (wbval y')))
+      (\h0 -> compPath Nat (wbval z) (add (wbval z) 0) (add (wbval x') (wbval y'))
+         (sym Nat (add (wbval z) 0) (wbval z) (add_zero_r (wbval z)))
+         (substId (\v -> Path Nat (add (wbval z) (mul v (wpow (wlen z)))) (add (wbval x') (wbval y'))) (pathToId h0) e1))
+      (\k ih -> \hk ->
+         let e2 : Path Nat (add (wbval z) (mul (suc k) (wpow (wlen z)))) (add (wbval x') (wbval y')) :=
+            substId (\v -> Path Nat (add (wbval z) (mul v (wpow (wlen z)))) (add (wbval x') (wbval y'))) (pathToId hk) e1 in
+         let hle : Le (wpow (wlen z)) (add (wbval x') (wbval y')) :=
+            le_rewrite (wpow (wlen z)) (wpow (wlen z)) (add (wbval z) (add (wpow (wlen z)) (mul k (wpow (wlen z))))) (add (wbval x') (wbval y')) (prefl Nat (wpow (wlen z))) e2 (le_add_inner (wpow (wlen z)) (wbval z) (mul k (wpow (wlen z)))) in
+         elim Empty (\_ -> Path Nat (wbval z) (add (wbval x') (wbval y')))
+            (lt_self_absurd (wpow (wlen z)) (le_trans (suc (wpow (wlen z))) (add (wbval x') (wbval y')) (wpow (wlen z)) (lt_le (wpow (wlen z)) (add (wbval x') (wbval y')) bd) hle)))
+      (wlimb c) (prefl Nat (wlimb c)) in
+  compPath Nat (wbval (badd x y)) (add (wbval x') (wbval y')) (add (wbval x) (wbval y))
+    goal
+    (compPath Nat (add (wbval x') (wbval y')) (add (wbval x) (wbval y')) (add (wbval x) (wbval y))
+       (cong Nat Nat (\s -> add s (wbval y')) (wbval x') (wbval x) (wbval_zap (suc (wlen y)) x))
+       (cong Nat Nat (\s -> add (wbval x) s) (wbval y') (wbval y) (wbval_zap (suc (wlen x)) y)))
