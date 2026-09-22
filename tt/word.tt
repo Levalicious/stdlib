@@ -1760,24 +1760,6 @@ def bpow_val : (x : WB) (k : Nat) -> Path Nat (wbval (bpow x k)) (pow (wbval x) 
        (cong Nat Nat (mul (wbval x)) (wbval (bpow x j)) (pow (wbval x) j) ih))
     k
 
--- ---- the chain division (M16b, 2026-09-16) ----
--- The quotient recursion with the dividend's VALUE as the fuel: every step that recurses has already dropped
--- below y, so the structural elim on the fuel is the measure and no well-founded recursion is needed. The
--- convention is the kernel's (and the runtime's): x / 0 = 0, x % 0 = x.
-def bdivmodGo (y : WB) (k : Nat) (x : WB) : Sigma WB (\_ -> WB) :=
-  elim Nat (\_ -> WB -> Sigma WB (\_ -> WB))
-    (\x -> (lnil {Word}, x))
-    (\j ih -> \x ->
-       ble_cases (suc (wbval x)) (wbval y) (Sigma WB (\_ -> WB))
-         (\_ -> (lnil {Word}, x))
-         (\_ -> let qr : Sigma WB (\_ -> WB) := ih (bsub x y) in
-                (badd (fst qr) wone, snd qr)))
-    k x
-def bdivmod (x y : WB) : Sigma WB (\_ -> WB) :=
-  ble_cases (suc (wbval y)) 1 (Sigma WB (\_ -> WB))
-    (\_ -> (lnil {Word}, x))
-    (\_ -> bdivmodGo y (wbval x) x)
-
 -- the difference cannot exceed what the sum allows: a <= j + Y gives sub a Y <= j
 def sub_le_of_add_le : (a j Y : Nat) -> Le a (add j Y) -> Le (sub a Y) j :=
   \a j -> elim Nat (\a -> (Y : Nat) -> Le a (add j Y) -> Le (sub a Y) j)
@@ -1793,20 +1775,36 @@ def sub_le_of_add_le : (a j Y : Nat) -> Le a (add j Y) -> Le (sub a Y) j :=
        Y)
     a
 
--- ---- the division's branchless step (M16b, 2026-09-16) ----
--- ble_cases on a symbolic ble does not reduce, so no law about a definition that branches that way can convert
--- through it. The library's own siter answers this: the decision is CARRIED by the invariant. Here the bound's
--- witness is the branch - at witness 0 the remainder is one short of y, so the count bumps and the remainder
--- restarts at zero; at a successor the remainder grows by one and the count stays.
--- the division invariant, mirroring SInv: q * y + r = x, and the bound that carries the decision. The witness of
--- the bound IS the branch, so the step never asks ble anything - siter's own device.
-def BInv (y x : WB) (p : Sigma WB (\_ -> WB)) : U :=
-  Sigma (Path Nat (add (mul (wbval (fst p)) (wbval y)) (wbval (snd p))) (wbval x))
-    (\_ -> Le (suc (wbval (snd p))) (wbval y))
--- one step: at witness 0 the remainder is one short of y, so the count bumps and the remainder restarts at zero;
--- at a successor the remainder just grows by one and the count stays
-def bstep (y : WB) (p : Sigma WB (\_ -> WB)) (h : Le (suc (wbval (snd p))) (wbval y)) : Sigma WB (\_ -> WB) :=
-  elim Nat (\d -> Path Nat (add (suc (wbval (snd p))) d) (wbval y) -> (Sigma WB (\_ -> WB)))
-    (\_ -> (badd (fst p) wone, lnil {Word}))
-    (\d' _ _ -> (fst p, badd (snd p) wone))
-    (fst h) (snd h)
+-- ---- the division and the inverse, specified through the values (M16b, 2026-09-16) ----
+-- The chain division's obligation is q * y + r = x with r < y, and the library already PROVES that for the
+-- naturals: siter_inv is the equation and siter_lt the bound, both landed without a single ble (siter's slack
+-- iteration carries the decision in its invariant). So the chain-level specification is the value-level one,
+-- read back through nelim - the unary chain of a natural - whose value law wbval_nelim is the only new piece.
+def nelim (k : Nat) : WB := elim Nat (\_ -> WB) (lnil {Word}) (\_ ih -> badd ih wone) k
+def wbval_nelim : (k : Nat) -> Path Nat (wbval (nelim k)) k :=
+  \k -> elim Nat (\k -> Path Nat (wbval (nelim k)) k)
+    (prefl Nat 0)
+    (\j ih -> compPath Nat (wbval (nelim (suc j))) (add (wbval (nelim j)) (wbval wone)) (suc j)
+       (badd_val (nelim j) wone)
+       (compPath Nat (add (wbval (nelim j)) (wbval wone)) (add (wbval (nelim j)) 1) (suc j)
+          (cong Nat Nat (\v -> add (wbval (nelim j)) v) (wbval wone) 1 wbval_wone)
+          (compPath Nat (add (wbval (nelim j)) 1) (add j 1) (suc j)
+             (cong Nat Nat (\v -> add v 1) (wbval (nelim j)) j ih)
+             (add_one_r j))))
+    k
+def bdivmod (x y : WB) (m' : Nat) (hm : Path Nat (suc m') (wbval y)) : Sigma WB (\_ -> WB) :=
+  (nelim (fst (siter m' (wbval x))), nelim (snd (siter m' (wbval x))))
+def bdivmod_val : (x y : WB) (m' : Nat) (hm : Path Nat (suc m') (wbval y))
+    -> Path Nat (add (mul (wbval (fst (bdivmod x y m' hm))) (wbval y)) (wbval (snd (bdivmod x y m' hm)))) (wbval x) :=
+  \x y m' hm ->(compPath Nat (add (mul (wbval (fst (bdivmod x y m' hm))) (wbval y)) (wbval (snd (bdivmod x y m' hm)))) (add (mul (wbval (fst (bdivmod x y m' hm))) (suc m')) (wbval (snd (bdivmod x y m' hm)))) (wbval x) (cong Nat Nat (\v -> add (mul (wbval (fst (bdivmod x y m' hm))) v) (wbval (snd (bdivmod x y m' hm)))) (wbval y) (suc m') (sym Nat (suc m') (wbval y) hm)) (compPath Nat (add (mul (wbval (fst (bdivmod x y m' hm))) (suc m')) (wbval (snd (bdivmod x y m' hm)))) (add (mul (fst (siter m' (wbval x))) (suc m')) (wbval (snd (bdivmod x y m' hm)))) (wbval x) (cong Nat Nat (\v -> add (mul v (suc m')) (wbval (snd (bdivmod x y m' hm)))) (wbval (fst (bdivmod x y m' hm))) (fst (siter m' (wbval x))) (wbval_nelim (fst (siter m' (wbval x))))) (compPath Nat (add (mul (fst (siter m' (wbval x))) (suc m')) (wbval (snd (bdivmod x y m' hm)))) (add (mul (fst (siter m' (wbval x))) (suc m')) (snd (siter m' (wbval x)))) (wbval x) (cong Nat Nat (\v -> add (mul (fst (siter m' (wbval x))) (suc m')) v) (wbval (snd (bdivmod x y m' hm))) (snd (siter m' (wbval x))) (wbval_nelim (snd (siter m' (wbval x))))) (compPath Nat (add (mul (fst (siter m' (wbval x))) (suc m')) (snd (siter m' (wbval x)))) (wbval x) (wbval x) (fst (siter_inv m' (wbval x))) (prefl Nat (wbval x))))))
+def bdivmod_lt : (x y : WB) (m' : Nat) (hm : Path Nat (suc m') (wbval y))
+    -> Lt (wbval (snd (bdivmod x y m' hm))) (wbval y) :=
+  \x y m' hm ->
+    let S : Nat := snd (siter m' (wbval x)) in
+    let R : Nat := wbval (snd (bdivmod x y m' hm)) in
+    substId (\w -> Id Nat (blt w (wbval y)) 1)
+      (pathToId (sym Nat R S (compPath Nat R (wbval (nelim S)) S (prefl Nat R) (wbval_nelim S))))
+      (substId (\v -> Id Nat (blt S v) 1) (pathToId hm) (siter_lt m' (wbval x)))
+def bminv (x y : WB) : WB := nelim (minv (wbval x) (wbval y))
+def bminv_val : (x y : WB) -> Path Nat (wbval (bminv x y)) (minv (wbval x) (wbval y)) :=
+  \x y -> wbval_nelim (minv (wbval x) (wbval y))
