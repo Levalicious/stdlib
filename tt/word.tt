@@ -1792,3 +1792,21 @@ def sub_le_of_add_le : (a j Y : Nat) -> Le a (add j Y) -> Le (sub a Y) j :=
                     (le_rewrite (suc i) (suc i) (add j (suc k)) (suc (add j k)) (prefl Nat (suc i)) (add_suc_r j k) h))))
        Y)
     a
+
+-- ---- the division's branchless step (M16b, 2026-09-16) ----
+-- ble_cases on a symbolic ble does not reduce, so no law about a definition that branches that way can convert
+-- through it. The library's own siter answers this: the decision is CARRIED by the invariant. Here the bound's
+-- witness is the branch - at witness 0 the remainder is one short of y, so the count bumps and the remainder
+-- restarts at zero; at a successor the remainder grows by one and the count stays.
+-- the division invariant, mirroring SInv: q * y + r = x, and the bound that carries the decision. The witness of
+-- the bound IS the branch, so the step never asks ble anything - siter's own device.
+def BInv (y x : WB) (p : Sigma WB (\_ -> WB)) : U :=
+  Sigma (Path Nat (add (mul (wbval (fst p)) (wbval y)) (wbval (snd p))) (wbval x))
+    (\_ -> Le (suc (wbval (snd p))) (wbval y))
+-- one step: at witness 0 the remainder is one short of y, so the count bumps and the remainder restarts at zero;
+-- at a successor the remainder just grows by one and the count stays
+def bstep (y : WB) (p : Sigma WB (\_ -> WB)) (h : Le (suc (wbval (snd p))) (wbval y)) : Sigma WB (\_ -> WB) :=
+  elim Nat (\d -> Path Nat (add (suc (wbval (snd p))) d) (wbval y) -> (Sigma WB (\_ -> WB)))
+    (\_ -> (badd (fst p) wone, lnil {Word}))
+    (\d' _ _ -> (fst p, badd (snd p) wone))
+    (fst h) (snd h)
