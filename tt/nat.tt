@@ -399,3 +399,28 @@ def mod_le_self : (m' x : Nat) -> Le (mod x (suc m')) x :=
 -- suc c at most m gives c at most m - 1: the witness survives, and pred reads the suc back off it
 def le_pred_one : (c m : Nat) -> Le (suc c) m -> Le c (sub m 1) :=
   \c m h -> let e : Nat := fst h in (e, cong Nat Nat pred (suc (add c e)) m (snd h))
+
+-- powers (M17): the laws the denoted numbers lean on. pow recurses on its exponent, so pow a 0 and
+-- pow a (suc b) are the body itself; everything else follows from those two and the semiring.
+def pow_zero : (a : Nat) -> Path Nat (pow a zero) 1 := \a -> prefl Nat 1
+def pow_suc : (a b : Nat) -> Path Nat (pow a (suc b)) (mul a (pow a b)) := \a b -> prefl Nat (mul a (pow a b))
+def pow_one : (a : Nat) -> Path Nat (pow a 1) a :=
+  \a -> compPath Nat (pow a 1) (mul a 1) a (prefl Nat (mul a 1)) (mul_one_r a)
+-- a ^ (b + c) = a ^ b * a ^ c, the law that merges two powers of the same base
+def pow_add : (a b c : Nat) -> Path Nat (pow a (add b c)) (mul (pow a b) (pow a c)) :=
+  \a b c -> elim Nat (\b -> Path Nat (pow a (add b c)) (mul (pow a b) (pow a c)))
+    (sym Nat (add (pow a c) zero) (pow a c) (add_zero_r (pow a c)))   -- mul 1 x is add x zero by the body
+    (\k ih -> compPath Nat (mul a (pow a (add k c))) (mul a (mul (pow a k) (pow a c))) (mul (mul a (pow a k)) (pow a c))
+       (cong Nat Nat (\x -> mul a x) (pow a (add k c)) (mul (pow a k) (pow a c)) ih)
+       (sym Nat (mul (mul a (pow a k)) (pow a c)) (mul a (mul (pow a k) (pow a c))) (mul_assoc a (pow a k) (pow a c)))) b
+-- (a ^ b) ^ c = a ^ (b * c), the law that flattens a tower
+def pow_mul : (a b c : Nat) -> Path Nat (pow (pow a b) c) (pow a (mul b c)) :=
+  \a b c -> elim Nat (\c -> Path Nat (pow (pow a b) c) (pow a (mul b c)))
+    (compPath Nat 1 (pow a zero) (pow a (mul b zero) )
+       (prefl Nat 1)
+       (sym Nat (pow a (mul b zero)) (pow a zero) (cong Nat Nat (pow a) (mul b zero) zero (mul_zero_r b))))
+    (\k ih -> compPath Nat (pow (pow a b) (suc k)) (mul (pow a b) (pow a (mul b k))) (pow a (mul b (suc k)))
+       (cong Nat Nat (\x -> mul (pow a b) x) (pow (pow a b) k) (pow a (mul b k)) ih)
+       (compPath Nat (mul (pow a b) (pow a (mul b k))) (pow a (add b (mul b k))) (pow a (mul b (suc k)))
+          (sym Nat (pow a (add b (mul b k))) (mul (pow a b) (pow a (mul b k))) (pow_add a b (mul b k)))
+          (cong Nat Nat (pow a) (add b (mul b k)) (mul b (suc k)) (sym Nat (mul b (suc k)) (add b (mul b k)) (mul_suc_r b k))))) c
