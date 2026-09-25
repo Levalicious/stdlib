@@ -2410,3 +2410,254 @@ def bdivmod_wb_val : (x y : WB) -> Sigma (Path Nat (wbval (bdiv_wb x y)) (div (w
       (substId (\v -> Path Nat 0 (div X v)) (pathToId (sym Nat Y 0 hY0)) (prefl Nat 0),
        substId (\v -> Path Nat X (mod X v)) (pathToId (sym Nat Y 0 hY0)) (prefl Nat X)))
     (bisz y) (prefl Nat (bisz y))
+-- ---- the modular power and the modular inverse (S6.5) ----
+-- The power with reduction after every product: the bit loop of bpow_wb with each square and each
+-- multiplication by the base taken modulo m (bmod_wb), so the running value never exceeds the modulus and
+-- the work is the exponent's bits, whatever the size of the power itself. With m = 0 the reduction is the
+-- identity and this is the plain power.
+def limbPowModGo (x m : WB) : Nat -> Word -> Word -> WB -> WB :=
+  elim Nat (\_ -> Word -> Word -> WB -> WB)
+    (\t w acc -> acc)
+    (\_ ih -> \t w acc -> elim Nat (\_ -> WB)
+       (ih (fst (wdivmod t 2)) (wsub w t) (bmod_wb (nmul (bmod_wb (nmul acc acc) m) x) m))
+       (\_ _ -> ih (fst (wdivmod t 2)) w (bmod_wb (nmul acc acc) m))
+       (blt (wlimb w) (wlimb t)))
+def limbPowMod (x m acc : WB) (w : Word) : WB := limbPowModGo x m 64 9223372036854775808 w acc
+def bpowModGo (x m : WB) : WB -> WB -> WB := elim List (\_ -> WB -> WB) (\acc -> acc) (\l r ih -> \acc -> ih (limbPowMod x m acc l))
+def bpowmod_wb (x e m : WB) : WB := bpowModGo x m e (bmod_wb wone m)
+-- the inverse by the prelude's rule, minv x y = x^(y-2) mod y: below two the exponent is zero and the answer
+-- is 1 mod y - 1 for y = 0, 0 for y = 1; from two on, the modular power at y - 2
+def wtwo : WB := lcons 2 (lnil {Word})
+def bminv_wb (x y : WB) : WB :=
+  elim Nat (\_ -> WB)
+    (bpowmod_wb x (nsub y wtwo) y)
+    (\_ _ -> elim Nat (\_ -> WB) (lnil {Word}) (\_ _ -> wone) (bisz y))
+    (blt_wb y wtwo)
+-- ---- their laws ----
+def wbval_wtwo : Path Nat (wbval wtwo) 2 := prefl Nat 2
+-- reduction commutes with the power, and a reduced base under a power inside a product may be unreduced
+def mod_pow : (a n m' : Nat) -> Path Nat (mod (pow (mod a (suc m')) n) (suc m')) (mod (pow a n) (suc m')) :=
+  \a -> elim Nat (\n -> (m' : Nat) -> Path Nat (mod (pow (mod a (suc m')) n) (suc m')) (mod (pow a n) (suc m')))
+    (\m' -> prefl Nat (mod 1 (suc m')))
+    (\n ih -> \m' ->
+      compPath Nat (mod (mul (mod a (suc m')) (pow (mod a (suc m')) n)) (suc m')) (mod (mul (mod a (suc m')) (mod (pow (mod a (suc m')) n) (suc m'))) (suc m')) (mod (mul a (pow a n)) (suc m'))
+        (mod_mul_mod2 (mod a (suc m')) (pow (mod a (suc m')) n) m')
+        (compPath Nat (mod (mul (mod a (suc m')) (mod (pow (mod a (suc m')) n) (suc m'))) (suc m')) (mod (mul (mod a (suc m')) (mod (pow a n) (suc m'))) (suc m')) (mod (mul a (pow a n)) (suc m'))
+           (cong Nat Nat (\v -> mod (mul (mod a (suc m')) v) (suc m')) (mod (pow (mod a (suc m')) n) (suc m')) (mod (pow a n) (suc m')) (ih m'))
+           (compPath Nat (mod (mul (mod a (suc m')) (mod (pow a n) (suc m'))) (suc m')) (mod (mul (mod a (suc m')) (pow a n)) (suc m')) (mod (mul a (pow a n)) (suc m'))
+              (sym Nat (mod (mul (mod a (suc m')) (pow a n)) (suc m')) (mod (mul (mod a (suc m')) (mod (pow a n) (suc m'))) (suc m')) (mod_mul_mod2 (mod a (suc m')) (pow a n) m'))
+              (sym Nat (mod (mul a (pow a n)) (suc m')) (mod (mul (mod a (suc m')) (pow a n)) (suc m')) (mod_mul_mod1 a (pow a n) m')))))
+def mod_mul_pow_mod : (a n v m' : Nat) -> Path Nat (mod (mul (pow (mod a (suc m')) n) v) (suc m')) (mod (mul (pow a n) v) (suc m')) :=
+  \a n v m' -> compPath Nat (mod (mul (pow (mod a (suc m')) n) v) (suc m')) (mod (mul (mod (pow (mod a (suc m')) n) (suc m')) v) (suc m')) (mod (mul (pow a n) v) (suc m'))
+    (mod_mul_mod1 (pow (mod a (suc m')) n) v m')
+    (compPath Nat (mod (mul (mod (pow (mod a (suc m')) n) (suc m')) v) (suc m')) (mod (mul (mod (pow a n) (suc m')) v) (suc m')) (mod (mul (pow a n) v) (suc m'))
+       (cong Nat Nat (\u -> mod (mul u v) (suc m')) (mod (pow (mod a (suc m')) n) (suc m')) (mod (pow a n) (suc m')) (mod_pow a n m'))
+       (sym Nat (mod (mul (pow a n) v) (suc m')) (mod (mul (mod (pow a n) (suc m')) v) (suc m')) (mod_mul_mod1 (pow a n) v m')))
+-- the remainder's value at a modulus known to be a successor
+def bmod_val_s : (a m : WB) (m' : Nat) -> Path Nat (suc m') (wbval m) -> Path Nat (wbval (bmod_wb a m)) (mod (wbval a) (suc m')) :=
+  \a m m' hm -> compPath Nat (wbval (bmod_wb a m)) (mod (wbval a) (wbval m)) (mod (wbval a) (suc m')) (snd (bdivmod_wb_val a m)) (cong Nat Nat (\v -> mod (wbval a) v) (wbval m) (suc m') (sym Nat (suc m') (wbval m) hm))
+-- Horner's step for the power, in one lemma (the algebra of bpowGo_val's cons case)
+def horner_pow : (A X : Nat) (l : Word) (r : WB) -> Path Nat (mul (pow (mul (pow A M64) (pow X (wlimb l))) (wpow (wlen r))) (pow X (wbval r))) (mul (pow A (wpow (suc (wlen r)))) (pow X (wbval (lcons l r)))) :=
+  \A X l r ->
+  let L : Nat := wlimb l in
+  let K : Nat := wpow (wlen r) in
+  let R : Nat := wbval r in
+  compPath Nat (mul (pow (mul (pow A M64) (pow X L)) K) (pow X R)) (mul (mul (pow A (mul M64 K)) (pow X (mul L K))) (pow X R)) (mul (pow A (wpow (suc (wlen r)))) (pow X (wbval (lcons l r))))
+    (cong Nat Nat (\v -> mul v (pow X R)) (pow (mul (pow A M64) (pow X L)) K) (mul (pow A (mul M64 K)) (pow X (mul L K)))
+       (compPath Nat (pow (mul (pow A M64) (pow X L)) K) (mul (pow (pow A M64) K) (pow (pow X L) K)) (mul (pow A (mul M64 K)) (pow X (mul L K)))
+          (pow_mul_dist (pow A M64) (pow X L) K)
+          (compPath Nat (mul (pow (pow A M64) K) (pow (pow X L) K)) (mul (pow A (mul M64 K)) (pow (pow X L) K)) (mul (pow A (mul M64 K)) (pow X (mul L K)))
+             (cong Nat Nat (\v -> mul v (pow (pow X L) K)) (pow (pow A M64) K) (pow A (mul M64 K)) (pow_mul A M64 K))
+             (cong Nat Nat (\v -> mul (pow A (mul M64 K)) v) (pow (pow X L) K) (pow X (mul L K)) (pow_mul X L K)))))
+    (compPath Nat (mul (mul (pow A (mul M64 K)) (pow X (mul L K))) (pow X R)) (mul (pow A (mul M64 K)) (mul (pow X (mul L K)) (pow X R))) (mul (pow A (wpow (suc (wlen r)))) (pow X (wbval (lcons l r))))
+       (mul_assoc (pow A (mul M64 K)) (pow X (mul L K)) (pow X R))
+       (compPath Nat (mul (pow A (mul M64 K)) (mul (pow X (mul L K)) (pow X R))) (mul (pow A (mul M64 K)) (pow X (add (mul L K) R))) (mul (pow A (wpow (suc (wlen r)))) (pow X (wbval (lcons l r))))
+          (cong Nat Nat (\v -> mul (pow A (mul M64 K)) v) (mul (pow X (mul L K)) (pow X R)) (pow X (add (mul L K) R)) (sym Nat (pow X (add (mul L K) R)) (mul (pow X (mul L K)) (pow X R)) (pow_add X (mul L K) R)))
+          (compPath Nat (mul (pow A (mul M64 K)) (pow X (add (mul L K) R))) (mul (pow A (wpow (suc (wlen r)))) (pow X (add (mul L K) R))) (mul (pow A (wpow (suc (wlen r)))) (pow X (wbval (lcons l r))))
+             (cong Nat Nat (\v -> mul (pow A v) (pow X (add (mul L K) R))) (mul M64 K) (wpow (suc (wlen r)))
+                (compPath Nat (mul M64 K) (mul K M64) (wpow (suc (wlen r))) (mul_comm M64 K) (sym Nat (wpow (suc (wlen r))) (mul K M64) (wpow_suc (wlen r)))))
+             (cong Nat Nat (\v -> mul (pow A (wpow (suc (wlen r)))) (pow X v)) (add (mul L K) R) (wbval (lcons l r)) (sym Nat (wbval (lcons l r)) (add (mul L K) R) (wbval_cons l r))))))
+-- the bit loop under reduction: the same invariant as the plain power's, taken modulo m at every step
+def limbPowModGo_val : (x m : WB) (m' : Nat) -> Path Nat (suc m') (wbval m) -> (f : Nat) (t w : Word) (acc : WB)
+    -> Path Nat (wlimb t) (pow 2 f) -> .(hw : Lt (wlimb w) (pow 2 (suc f)))
+    -> Path Nat (wbval (limbPowModGo x m (suc f) t w acc)) (mod (mul (pow (wbval acc) (pow 2 (suc f))) (pow (wbval x) (wlimb w))) (suc m')) :=
+  \x m m' hm -> elim Nat (\f -> (t w : Word) (acc : WB) -> Path Nat (wlimb t) (pow 2 f) -> .(hw : Lt (wlimb w) (pow 2 (suc f)))
+                        -> Path Nat (wbval (limbPowModGo x m (suc f) t w acc)) (mod (mul (pow (wbval acc) (pow 2 (suc f))) (pow (wbval x) (wlimb w))) (suc m')))
+    (\t w acc ht hw ->
+      let T : Nat := wlimb t in
+      let W : Nat := wlimb w in
+      let A : Nat := wbval acc in
+      let X : Nat := wbval x in
+      let M : Nat := suc m' in
+      let hsq : Path Nat (wbval (bmod_wb (nmul acc acc) m)) (mod (mul A A) M) :=
+        compPath Nat (wbval (bmod_wb (nmul acc acc) m)) (mod (wbval (nmul acc acc)) M) (mod (mul A A) M) (bmod_val_s (nmul acc acc) m m' hm) (cong Nat Nat (\v -> mod v M) (wbval (nmul acc acc)) (mul A A) (nmul_val acc acc)) in
+      elim Nat (\k2 -> Path Nat (blt W T) k2 -> Path Nat (wbval (elim Nat (\_ -> WB) (bmod_wb (nmul (bmod_wb (nmul acc acc) m) x) m) (\_ _ -> bmod_wb (nmul acc acc) m) k2)) (mod (mul (pow A 2) (pow X W)) M))
+        (\h0 ->
+          let hW1 : Path Nat W 1 := lt2_one W (substId (\v -> Le v W) (pathToId ht) (le_suc_suc T W (ble_not (suc W) T (pathToId h0)))) hw in
+          compPath Nat (wbval (bmod_wb (nmul (bmod_wb (nmul acc acc) m) x) m)) (mod (mul (mod (mul A A) M) X) M) (mod (mul (pow A 2) (pow X W)) M)
+            (compPath Nat (wbval (bmod_wb (nmul (bmod_wb (nmul acc acc) m) x) m)) (mod (wbval (nmul (bmod_wb (nmul acc acc) m) x)) M) (mod (mul (mod (mul A A) M) X) M)
+               (bmod_val_s (nmul (bmod_wb (nmul acc acc) m) x) m m' hm)
+               (cong Nat Nat (\v -> mod v M) (wbval (nmul (bmod_wb (nmul acc acc) m) x)) (mul (mod (mul A A) M) X)
+                  (compPath Nat (wbval (nmul (bmod_wb (nmul acc acc) m) x)) (mul (wbval (bmod_wb (nmul acc acc) m)) X) (mul (mod (mul A A) M) X)
+                     (nmul_val (bmod_wb (nmul acc acc) m) x)
+                     (cong Nat Nat (\v -> mul v X) (wbval (bmod_wb (nmul acc acc) m)) (mod (mul A A) M) hsq))))
+            (compPath Nat (mod (mul (mod (mul A A) M) X) M) (mod (mul (mul A A) X) M) (mod (mul (pow A 2) (pow X W)) M)
+               (sym Nat (mod (mul (mul A A) X) M) (mod (mul (mod (mul A A) M) X) M) (mod_mul_mod1 (mul A A) X m'))
+               (cong Nat Nat (\v -> mod v M) (mul (mul A A) X) (mul (pow A 2) (pow X W))
+                  (compPath Nat (mul (mul A A) X) (mul (pow A 2) X) (mul (pow A 2) (pow X W))
+                     (cong Nat Nat (\v -> mul v X) (mul A A) (pow A 2) (sym Nat (pow A 2) (mul A A) (a_sq A)))
+                     (cong Nat Nat (\v -> mul (pow A 2) v) X (pow X W) (sym Nat (pow X W) X (compPath Nat (pow X W) (pow X 1) X (cong Nat Nat (pow X) W 1 hW1) (pow_one X))))))))
+        (\k _ -> \hk ->
+          let hW0 : Path Nat W 0 := lt1_zero W (substId (\v -> Lt W v) (pathToId ht) (ble_ones (suc W) T k (pathToId hk))) in
+          compPath Nat (wbval (bmod_wb (nmul acc acc) m)) (mod (mul A A) M) (mod (mul (pow A 2) (pow X W)) M)
+            hsq
+            (cong Nat Nat (\v -> mod v M) (mul A A) (mul (pow A 2) (pow X W))
+               (sym Nat (mul (pow A 2) (pow X W)) (mul A A)
+                  (compPath Nat (mul (pow A 2) (pow X W)) (mul (pow A 2) 1) (mul A A)
+                     (cong Nat Nat (\v -> mul (pow A 2) (pow X v)) W 0 hW0)
+                     (compPath Nat (mul (pow A 2) 1) (pow A 2) (mul A A) (mul_one_r (pow A 2)) (a_sq A))))))
+        (blt W T) (prefl Nat (blt W T)))
+    (\f ih -> \t w acc ht hw ->
+      let T : Nat := wlimb t in
+      let W : Nat := wlimb w in
+      let A : Nat := wbval acc in
+      let X : Nat := wbval x in
+      let M : Nat := suc m' in
+      let N : Nat := pow 2 (suc f) in
+      let t' : Word := fst (wdivmod t 2) in
+      let ht' : Path Nat (wlimb t') (pow 2 f) := wlimb_wdiv2 t f ht in
+      let hsq : Path Nat (wbval (bmod_wb (nmul acc acc) m)) (mod (mul A A) M) :=
+        compPath Nat (wbval (bmod_wb (nmul acc acc) m)) (mod (wbval (nmul acc acc)) M) (mod (mul A A) M) (bmod_val_s (nmul acc acc) m m' hm) (cong Nat Nat (\v -> mod v M) (wbval (nmul acc acc)) (mul A A) (nmul_val acc acc)) in
+      elim Nat (\k2 -> Path Nat (blt W T) k2 -> Path Nat (wbval (elim Nat (\_ -> WB) (limbPowModGo x m (suc f) t' (wsub w t) (bmod_wb (nmul (bmod_wb (nmul acc acc) m) x) m)) (\_ _ -> limbPowModGo x m (suc f) t' w (bmod_wb (nmul acc acc) m)) k2)) (mod (mul (pow A (pow 2 (suc (suc f)))) (pow X W)) M))
+        (\h0 ->
+          let hTW : Le T W := le_suc_suc T W (ble_not (suc W) T (pathToId h0)) in
+          let d : Nat := fst hTW in
+          let hd : Path Nat (add T d) W := snd hTW in
+          let hsub : Path Nat (wlimb (wsub w t)) d :=
+            compPath Nat (wlimb (wsub w t)) (sub W T) d (wsub_ge w t hTW)
+              (compPath Nat (sub W T) (sub (add T d) T) d (cong Nat Nat (\v -> sub v T) W (add T d) (sym Nat (add T d) W hd)) (sub_add_d T d)) in
+          let hdN : Lt d N :=
+            le_ble (suc d) N (le_cancel_l T (suc d) N
+              (substId (\v -> Le v (add T N)) (pathToId (sym Nat (add T (suc d)) (suc (add T d)) (add_suc_r T d)))
+                (substId (\v -> Le (suc v) (add T N)) (pathToId (sym Nat (add T d) W hd))
+                  (substId (\v -> Le (suc W) (add v N)) (pathToId (sym Nat T (pow 2 (suc f)) ht))
+                    (substId (\v -> Le (suc W) v) (pathToId (mul_two N)) (ble_le (suc W) (mul 2 N) hw)))))) in
+          let hw' : Lt (wlimb (wsub w t)) N := substId (\v -> Lt v N) (pathToId (sym Nat (wlimb (wsub w t)) d hsub)) hdN in
+          let acc' : WB := bmod_wb (nmul (bmod_wb (nmul acc acc) m) x) m in
+          let hacc' : Path Nat (wbval acc') (mod (mul (mod (mul A A) M) X) M) :=
+            compPath Nat (wbval acc') (mod (wbval (nmul (bmod_wb (nmul acc acc) m) x)) M) (mod (mul (mod (mul A A) M) X) M)
+              (bmod_val_s (nmul (bmod_wb (nmul acc acc) m) x) m m' hm)
+              (cong Nat Nat (\v -> mod v M) (wbval (nmul (bmod_wb (nmul acc acc) m) x)) (mul (mod (mul A A) M) X)
+                 (compPath Nat (wbval (nmul (bmod_wb (nmul acc acc) m) x)) (mul (wbval (bmod_wb (nmul acc acc) m)) X) (mul (mod (mul A A) M) X)
+                    (nmul_val (bmod_wb (nmul acc acc) m) x)
+                    (cong Nat Nat (\v -> mul v X) (wbval (bmod_wb (nmul acc acc) m)) (mod (mul A A) M) hsq))) in
+          compPath Nat (wbval (limbPowModGo x m (suc f) t' (wsub w t) acc')) (mod (mul (pow (wbval acc') N) (pow X (wlimb (wsub w t)))) M) (mod (mul (pow A (pow 2 (suc (suc f)))) (pow X W)) M)
+            (ih t' (wsub w t) acc' ht' hw')
+            (compPath Nat (mod (mul (pow (wbval acc') N) (pow X (wlimb (wsub w t)))) M) (mod (mul (pow (mul (mod (mul A A) M) X) N) (pow X d)) M) (mod (mul (pow A (pow 2 (suc (suc f)))) (pow X W)) M)
+               (compPath Nat (mod (mul (pow (wbval acc') N) (pow X (wlimb (wsub w t)))) M) (mod (mul (pow (mod (mul (mod (mul A A) M) X) M) N) (pow X d)) M) (mod (mul (pow (mul (mod (mul A A) M) X) N) (pow X d)) M)
+                  (compPath Nat (mod (mul (pow (wbval acc') N) (pow X (wlimb (wsub w t)))) M) (mod (mul (pow (mod (mul (mod (mul A A) M) X) M) N) (pow X (wlimb (wsub w t)))) M) (mod (mul (pow (mod (mul (mod (mul A A) M) X) M) N) (pow X d)) M)
+                     (cong Nat Nat (\v -> mod (mul (pow v N) (pow X (wlimb (wsub w t)))) M) (wbval acc') (mod (mul (mod (mul A A) M) X) M) hacc')
+                     (cong Nat Nat (\v -> mod (mul (pow (mod (mul (mod (mul A A) M) X) M) N) (pow X v)) M) (wlimb (wsub w t)) d hsub))
+                  (mod_mul_pow_mod (mul (mod (mul A A) M) X) N (pow X d) m'))
+               (compPath Nat (mod (mul (pow (mul (mod (mul A A) M) X) N) (pow X d)) M) (mod (mul (pow (mod (mul A A) M) N) (mul (pow X N) (pow X d))) M) (mod (mul (pow A (pow 2 (suc (suc f)))) (pow X W)) M)
+                  (cong Nat Nat (\v -> mod v M) (mul (pow (mul (mod (mul A A) M) X) N) (pow X d)) (mul (pow (mod (mul A A) M) N) (mul (pow X N) (pow X d)))
+                     (compPath Nat (mul (pow (mul (mod (mul A A) M) X) N) (pow X d)) (mul (mul (pow (mod (mul A A) M) N) (pow X N)) (pow X d)) (mul (pow (mod (mul A A) M) N) (mul (pow X N) (pow X d)))
+                        (cong Nat Nat (\v -> mul v (pow X d)) (pow (mul (mod (mul A A) M) X) N) (mul (pow (mod (mul A A) M) N) (pow X N)) (pow_mul_dist (mod (mul A A) M) X N))
+                        (mul_assoc (pow (mod (mul A A) M) N) (pow X N) (pow X d))))
+                  (compPath Nat (mod (mul (pow (mod (mul A A) M) N) (mul (pow X N) (pow X d))) M) (mod (mul (pow (mul A A) N) (mul (pow X N) (pow X d))) M) (mod (mul (pow A (pow 2 (suc (suc f)))) (pow X W)) M)
+                     (mod_mul_pow_mod (mul A A) N (mul (pow X N) (pow X d)) m')
+                     (cong Nat Nat (\v -> mod v M) (mul (pow (mul A A) N) (mul (pow X N) (pow X d))) (mul (pow A (pow 2 (suc (suc f)))) (pow X W))
+                        (compPath Nat (mul (pow (mul A A) N) (mul (pow X N) (pow X d))) (mul (pow A (mul 2 N)) (mul (pow X N) (pow X d))) (mul (pow A (pow 2 (suc (suc f)))) (pow X W))
+                           (cong Nat Nat (\v -> mul v (mul (pow X N) (pow X d))) (pow (mul A A) N) (pow A (mul 2 N)) (pow_sq A N))
+                           (cong Nat Nat (\v -> mul (pow A (mul 2 N)) v) (mul (pow X N) (pow X d)) (pow X W)
+                              (compPath Nat (mul (pow X N) (pow X d)) (pow X (add N d)) (pow X W)
+                                 (sym Nat (pow X (add N d)) (mul (pow X N) (pow X d)) (pow_add X N d))
+                                 (cong Nat Nat (pow X) (add N d) W (compPath Nat (add N d) (add T d) W (cong Nat Nat (\v -> add v d) N T (sym Nat T N ht)) hd))))))))))
+        (\k _ -> \hk ->
+          let hw' : Lt W N := substId (\v -> Lt W v) (pathToId ht) (ble_ones (suc W) T k (pathToId hk)) in
+          let acc0 : WB := bmod_wb (nmul acc acc) m in
+          compPath Nat (wbval (limbPowModGo x m (suc f) t' w acc0)) (mod (mul (pow (wbval acc0) N) (pow X W)) M) (mod (mul (pow A (pow 2 (suc (suc f)))) (pow X W)) M)
+            (ih t' w acc0 ht' hw')
+            (compPath Nat (mod (mul (pow (wbval acc0) N) (pow X W)) M) (mod (mul (pow (mod (mul A A) M) N) (pow X W)) M) (mod (mul (pow A (pow 2 (suc (suc f)))) (pow X W)) M)
+               (cong Nat Nat (\v -> mod (mul (pow v N) (pow X W)) M) (wbval acc0) (mod (mul A A) M) hsq)
+               (compPath Nat (mod (mul (pow (mod (mul A A) M) N) (pow X W)) M) (mod (mul (pow (mul A A) N) (pow X W)) M) (mod (mul (pow A (pow 2 (suc (suc f)))) (pow X W)) M)
+                  (mod_mul_pow_mod (mul A A) N (pow X W) m')
+                  (cong Nat Nat (\v -> mod (mul v (pow X W)) M) (pow (mul A A) N) (pow A (mul 2 N)) (pow_sq A N)))))
+        (blt W T) (prefl Nat (blt W T)))
+def limbPowMod_val : (x m : WB) (m' : Nat) -> Path Nat (suc m') (wbval m) -> (acc : WB) (w : Word)
+    -> Path Nat (wbval (limbPowMod x m acc w)) (mod (mul (pow (wbval acc) M64) (pow (wbval x) (wlimb w))) (suc m')) :=
+  \x m m' hm acc w -> limbPowModGo_val x m m' hm 63 9223372036854775808 w acc (prefl Nat 9223372036854775808) (snd w)
+-- Horner over the limbs, the running value kept reduced (a reduced value is its own remainder: mod_mod)
+def bpowModGo_val : (x m : WB) (m' : Nat) -> Path Nat (suc m') (wbval m) -> (e acc : WB) -> Path Nat (wbval acc) (mod (wbval acc) (suc m'))
+    -> Path Nat (wbval (bpowModGo x m e acc)) (mod (mul (pow (wbval acc) (wpow (wlen e))) (pow (wbval x) (wbval e))) (suc m')) :=
+  \x m m' hm -> elim List (\e -> (acc : WB) -> Path Nat (wbval acc) (mod (wbval acc) (suc m'))
+                          -> Path Nat (wbval (bpowModGo x m e acc)) (mod (mul (pow (wbval acc) (wpow (wlen e))) (pow (wbval x) (wbval e))) (suc m')))
+    (\acc hred -> compPath Nat (wbval acc) (mod (wbval acc) (suc m')) (mod (mul (pow (wbval acc) 1) 1) (suc m')) hred
+       (cong Nat Nat (\v -> mod v (suc m')) (wbval acc) (mul (pow (wbval acc) 1) 1)
+          (sym Nat (mul (pow (wbval acc) 1) 1) (wbval acc)
+             (compPath Nat (mul (pow (wbval acc) 1) 1) (mul (wbval acc) 1) (wbval acc) (cong Nat Nat (\v -> mul v 1) (pow (wbval acc) 1) (wbval acc) (pow_one (wbval acc))) (mul_one_r (wbval acc))))))
+    (\l r ih -> \acc hred ->
+      let X : Nat := wbval x in
+      let A : Nat := wbval acc in
+      let M : Nat := suc m' in
+      let acc1 : WB := limbPowMod x m acc l in
+      let h1 : Path Nat (wbval acc1) (mod (mul (pow A M64) (pow X (wlimb l))) M) := limbPowMod_val x m m' hm acc l in
+      let hred1 : Path Nat (wbval acc1) (mod (wbval acc1) M) :=
+        compPath Nat (wbval acc1) (mod (mul (pow A M64) (pow X (wlimb l))) M) (mod (wbval acc1) M) h1
+          (compPath Nat (mod (mul (pow A M64) (pow X (wlimb l))) M) (mod (mod (mul (pow A M64) (pow X (wlimb l))) M) M) (mod (wbval acc1) M)
+             (sym Nat (mod (mod (mul (pow A M64) (pow X (wlimb l))) M) M) (mod (mul (pow A M64) (pow X (wlimb l))) M) (mod_mod (mul (pow A M64) (pow X (wlimb l))) m'))
+             (cong Nat Nat (\v -> mod v M) (mod (mul (pow A M64) (pow X (wlimb l))) M) (wbval acc1) (sym Nat (wbval acc1) (mod (mul (pow A M64) (pow X (wlimb l))) M) h1))) in
+      compPath Nat (wbval (bpowModGo x m r acc1)) (mod (mul (pow (wbval acc1) (wpow (wlen r))) (pow X (wbval r))) M) (mod (mul (pow A (wpow (suc (wlen r)))) (pow X (wbval (lcons l r)))) M)
+        (ih acc1 hred1)
+        (compPath Nat (mod (mul (pow (wbval acc1) (wpow (wlen r))) (pow X (wbval r))) M) (mod (mul (pow (mod (mul (pow A M64) (pow X (wlimb l))) M) (wpow (wlen r))) (pow X (wbval r))) M) (mod (mul (pow A (wpow (suc (wlen r)))) (pow X (wbval (lcons l r)))) M)
+           (cong Nat Nat (\v -> mod (mul (pow v (wpow (wlen r))) (pow X (wbval r))) M) (wbval acc1) (mod (mul (pow A M64) (pow X (wlimb l))) M) h1)
+           (compPath Nat (mod (mul (pow (mod (mul (pow A M64) (pow X (wlimb l))) M) (wpow (wlen r))) (pow X (wbval r))) M) (mod (mul (pow (mul (pow A M64) (pow X (wlimb l))) (wpow (wlen r))) (pow X (wbval r))) M) (mod (mul (pow A (wpow (suc (wlen r)))) (pow X (wbval (lcons l r)))) M)
+              (mod_mul_pow_mod (mul (pow A M64) (pow X (wlimb l))) (wpow (wlen r)) (pow X (wbval r)) m')
+              (cong Nat Nat (\v -> mod v M) (mul (pow (mul (pow A M64) (pow X (wlimb l))) (wpow (wlen r))) (pow X (wbval r))) (mul (pow A (wpow (suc (wlen r)))) (pow X (wbval (lcons l r)))) (horner_pow A X l r)))))
+def bpowmod_wb_val : (x e m : WB) (m' : Nat) -> Path Nat (suc m') (wbval m) -> Path Nat (wbval (bpowmod_wb x e m)) (mod (pow (wbval x) (wbval e)) (suc m')) :=
+  \x e m m' hm ->
+  let X : Nat := wbval x in
+  let E : Nat := wbval e in
+  let M : Nat := suc m' in
+  let acc0 : WB := bmod_wb wone m in
+  let h0 : Path Nat (wbval acc0) (mod 1 M) := compPath Nat (wbval acc0) (mod (wbval wone) M) (mod 1 M) (bmod_val_s wone m m' hm) (cong Nat Nat (\v -> mod v M) (wbval wone) 1 wbval_wone) in
+  let hred0 : Path Nat (wbval acc0) (mod (wbval acc0) M) :=
+    compPath Nat (wbval acc0) (mod 1 M) (mod (wbval acc0) M) h0
+      (compPath Nat (mod 1 M) (mod (mod 1 M) M) (mod (wbval acc0) M) (sym Nat (mod (mod 1 M) M) (mod 1 M) (mod_mod 1 m')) (cong Nat Nat (\v -> mod v M) (mod 1 M) (wbval acc0) (sym Nat (wbval acc0) (mod 1 M) h0))) in
+  compPath Nat (wbval (bpowmod_wb x e m)) (mod (mul (pow (wbval acc0) (wpow (wlen e))) (pow X E)) M) (mod (pow X E) M)
+    (bpowModGo_val x m m' hm e acc0 hred0)
+    (compPath Nat (mod (mul (pow (wbval acc0) (wpow (wlen e))) (pow X E)) M) (mod (mul (pow (mod 1 M) (wpow (wlen e))) (pow X E)) M) (mod (pow X E) M)
+       (cong Nat Nat (\v -> mod (mul (pow v (wpow (wlen e))) (pow X E)) M) (wbval acc0) (mod 1 M) h0)
+       (compPath Nat (mod (mul (pow (mod 1 M) (wpow (wlen e))) (pow X E)) M) (mod (mul (pow 1 (wpow (wlen e))) (pow X E)) M) (mod (pow X E) M)
+          (mod_mul_pow_mod 1 (wpow (wlen e)) (pow X E) m')
+          (cong Nat Nat (\v -> mod v M) (mul (pow 1 (wpow (wlen e))) (pow X E)) (pow X E)
+             (compPath Nat (mul (pow 1 (wpow (wlen e))) (pow X E)) (mul 1 (pow X E)) (pow X E) (cong Nat Nat (\v -> mul v (pow X E)) (pow 1 (wpow (wlen e))) 1 (one_pow (wpow (wlen e)))) (one_mul (pow X E))))))
+-- the inverse's law: minv by the prelude's rule at every y. Below two the exponent is zero and the
+-- prelude's own reduction decides; from two on, y = suc (suc d) and the modular power's law applies.
+def bminv_wb_val : (x y : WB) -> Path Nat (wbval (bminv_wb x y)) (minv (wbval x) (wbval y)) :=
+  \x y ->
+  let X : Nat := wbval x in
+  let Y : Nat := wbval y in
+  elim Nat (\k2 -> Path Nat (blt_wb y wtwo) k2 -> Path Nat (wbval (elim Nat (\_ -> WB) (bpowmod_wb x (nsub y wtwo) y) (\_ _ -> elim Nat (\_ -> WB) (lnil {Word}) (\_ _ -> wone) (bisz y)) k2)) (minv X Y))
+    (\h0 ->
+      let hblt : Path Nat (blt Y 2) 0 := compPath Nat (blt Y 2) (blt_wb y wtwo) 0 (sym Nat (blt_wb y wtwo) (blt Y 2) (compPath Nat (blt_wb y wtwo) (blt Y (wbval wtwo)) (blt Y 2) (blt_wb_val y wtwo) (cong Nat Nat (blt Y) (wbval wtwo) 2 wbval_wtwo))) h0 in
+      let h2Y : Le 2 Y := le_suc_suc 2 Y (ble_not (suc Y) 2 (pathToId hblt)) in
+      let d : Nat := fst h2Y in
+      let hY : Path Nat (suc (suc d)) Y := snd h2Y in
+      compPath Nat (wbval (bpowmod_wb x (nsub y wtwo) y)) (mod (pow X (wbval (nsub y wtwo))) (suc (suc d))) (minv X Y)
+        (bpowmod_wb_val x (nsub y wtwo) y (suc d) hY)
+        (compPath Nat (mod (pow X (wbval (nsub y wtwo))) (suc (suc d))) (mod (pow X (sub Y 2)) (suc (suc d))) (minv X Y)
+           (cong Nat Nat (\v -> mod (pow X v) (suc (suc d))) (wbval (nsub y wtwo)) (sub Y 2) (compPath Nat (wbval (nsub y wtwo)) (sub Y (wbval wtwo)) (sub Y 2) (nsub_val y wtwo) (cong Nat Nat (sub Y) (wbval wtwo) 2 wbval_wtwo)))
+           (cong Nat Nat (\v -> mod (pow X (sub Y 2)) v) (suc (suc d)) Y hY)))
+    (\k _ -> \hk ->
+      let hlt : Lt Y 2 := ble_ones (suc Y) 2 k (pathToId (compPath Nat (blt Y 2) (blt_wb y wtwo) (suc k) (sym Nat (blt_wb y wtwo) (blt Y 2) (compPath Nat (blt_wb y wtwo) (blt Y (wbval wtwo)) (blt Y 2) (blt_wb_val y wtwo) (cong Nat Nat (blt Y) (wbval wtwo) 2 wbval_wtwo))) hk)) in
+      elim Nat (\k3 -> Path Nat (bisz y) k3 -> Path Nat (wbval (elim Nat (\_ -> WB) (lnil {Word}) (\_ _ -> wone) k3)) (minv X Y))
+        (\hz ->
+          let hYs : Path Nat Y (suc (pred Y)) := isZero_suc_of_zero Y (compPath Nat (isZero Y) (bisz y) 0 (sym Nat (bisz y) (isZero Y) (bisz_val y)) hz) in
+          let hY1 : Path Nat Y 1 := lt2_one Y (pred Y, sym Nat Y (suc (pred Y)) hYs) hlt in
+          substId (\v -> Path Nat 0 (minv X v)) (pathToId (sym Nat Y 1 hY1)) (prefl Nat 0))
+        (\k4 _ -> \hz ->
+          let hY0 : Path Nat Y 0 := isZero_zero_of_suc Y k4 (compPath Nat (isZero Y) (bisz y) (suc k4) (sym Nat (bisz y) (isZero Y) (bisz_val y)) hz) in
+          substId (\v -> Path Nat 1 (minv X v)) (pathToId (sym Nat Y 0 hY0)) (prefl Nat 1))
+        (bisz y) (prefl Nat (bisz y)))
+    (blt_wb y wtwo) (prefl Nat (blt_wb y wtwo))
