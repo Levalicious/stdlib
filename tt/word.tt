@@ -1750,16 +1750,6 @@ def wbval_wone : Path Nat (wbval wone) 1 :=
     (compPath Nat (add (mul (wlimb 1) (wpow (wlen (lnil {Word})))) (wbval (lnil {Word}))) (add 1 0) 1
        (prefl Nat (add 1 0))
        (add_zero_r 1))
--- the chain power, by the exponent, with bmul's value law doing the work
-def bpow (x : WB) (k : Nat) : WB := elim Nat (\_ -> WB) wone (\_ ih -> bmul x ih) k
-def bpow_val : (x : WB) (k : Nat) -> Path Nat (wbval (bpow x k)) (pow (wbval x) k) :=
-  \x k -> elim Nat (\k -> Path Nat (wbval (bpow x k)) (pow (wbval x) k))
-    (wbval_wone)
-    (\j ih -> compPath Nat (wbval (bpow x (suc j))) (mul (wbval x) (wbval (bpow x j))) (pow (wbval x) (suc j))
-       (bmul_val x (bpow x j))
-       (cong Nat Nat (mul (wbval x)) (wbval (bpow x j)) (pow (wbval x) j) ih))
-    k
-
 -- the difference cannot exceed what the sum allows: a <= j + Y gives sub a Y <= j
 def sub_le_of_add_le : (a j Y : Nat) -> Le a (add j Y) -> Le (sub a Y) j :=
   \a j -> elim Nat (\a -> (Y : Nat) -> Le a (add j Y) -> Le (sub a Y) j)
@@ -1775,11 +1765,11 @@ def sub_le_of_add_le : (a j Y : Nat) -> Le a (add j Y) -> Le (sub a Y) j :=
        Y)
     a
 
--- ---- the division and the inverse, specified through the values (M16b, 2026-09-16) ----
--- The chain division's obligation is q * y + r = x with r < y, and the library already PROVES that for the
--- naturals: siter_inv is the equation and siter_lt the bound, both landed without a single ble (siter's slack
--- iteration carries the decision in its invariant). So the chain-level specification is the value-level one,
--- read back through nelim - the unary chain of a natural - whose value law wbval_nelim is the only new piece.
+-- ---- the embedding of a natural as its own chain ----
+-- nelim is the unary chain of a natural, one badd of wone per successor: a SPECIFICATION device, the target
+-- of wbval_nelim and of the laws that read a natural back through it. The runtime never runs it; a literal
+-- erases to its limbs directly. The chain division, power and inverse that used to be defined through it
+-- (M16b, 09-16: through the values, O(value) at run time) are retired; the S6 algorithms replace them.
 def nelim (k : Nat) : WB := elim Nat (\_ -> WB) (lnil {Word}) (\_ ih -> badd ih wone) k
 def wbval_nelim : (k : Nat) -> Path Nat (wbval (nelim k)) k :=
   \k -> elim Nat (\k -> Path Nat (wbval (nelim k)) k)
@@ -1792,23 +1782,6 @@ def wbval_nelim : (k : Nat) -> Path Nat (wbval (nelim k)) k :=
              (cong Nat Nat (\v -> add v 1) (wbval (nelim j)) j ih)
              (add_one_r j))))
     k
-def bdivmod (x y : WB) (m' : Nat) (hm : Path Nat (suc m') (wbval y)) : Sigma WB (\_ -> WB) :=
-  (nelim (fst (siter m' (wbval x))), nelim (snd (siter m' (wbval x))))
-def bdivmod_val : (x y : WB) (m' : Nat) (hm : Path Nat (suc m') (wbval y))
-    -> Path Nat (add (mul (wbval (fst (bdivmod x y m' hm))) (wbval y)) (wbval (snd (bdivmod x y m' hm)))) (wbval x) :=
-  \x y m' hm ->(compPath Nat (add (mul (wbval (fst (bdivmod x y m' hm))) (wbval y)) (wbval (snd (bdivmod x y m' hm)))) (add (mul (wbval (fst (bdivmod x y m' hm))) (suc m')) (wbval (snd (bdivmod x y m' hm)))) (wbval x) (cong Nat Nat (\v -> add (mul (wbval (fst (bdivmod x y m' hm))) v) (wbval (snd (bdivmod x y m' hm)))) (wbval y) (suc m') (sym Nat (suc m') (wbval y) hm)) (compPath Nat (add (mul (wbval (fst (bdivmod x y m' hm))) (suc m')) (wbval (snd (bdivmod x y m' hm)))) (add (mul (fst (siter m' (wbval x))) (suc m')) (wbval (snd (bdivmod x y m' hm)))) (wbval x) (cong Nat Nat (\v -> add (mul v (suc m')) (wbval (snd (bdivmod x y m' hm)))) (wbval (fst (bdivmod x y m' hm))) (fst (siter m' (wbval x))) (wbval_nelim (fst (siter m' (wbval x))))) (compPath Nat (add (mul (fst (siter m' (wbval x))) (suc m')) (wbval (snd (bdivmod x y m' hm)))) (add (mul (fst (siter m' (wbval x))) (suc m')) (snd (siter m' (wbval x)))) (wbval x) (cong Nat Nat (\v -> add (mul (fst (siter m' (wbval x))) (suc m')) v) (wbval (snd (bdivmod x y m' hm))) (snd (siter m' (wbval x))) (wbval_nelim (snd (siter m' (wbval x))))) (compPath Nat (add (mul (fst (siter m' (wbval x))) (suc m')) (snd (siter m' (wbval x)))) (wbval x) (wbval x) (fst (siter_inv m' (wbval x))) (prefl Nat (wbval x))))))
-def bdivmod_lt : (x y : WB) (m' : Nat) (hm : Path Nat (suc m') (wbval y))
-    -> Lt (wbval (snd (bdivmod x y m' hm))) (wbval y) :=
-  \x y m' hm ->
-    let S : Nat := snd (siter m' (wbval x)) in
-    let R : Nat := wbval (snd (bdivmod x y m' hm)) in
-    substId (\w -> Id Nat (blt w (wbval y)) 1)
-      (pathToId (sym Nat R S (compPath Nat R (wbval (nelim S)) S (prefl Nat R) (wbval_nelim S))))
-      (substId (\v -> Id Nat (blt S v) 1) (pathToId hm) (siter_lt m' (wbval x)))
-def bminv (x y : WB) : WB := nelim (minv (wbval x) (wbval y))
-def bminv_val : (x y : WB) -> Path Nat (wbval (bminv x y)) (minv (wbval x) (wbval y)) :=
-  \x y -> wbval_nelim (minv (wbval x) (wbval y))
-
 -- ---- the runtime's chain (M17, the pivot to A): the normal form, the zero test, the padded comparisons ----
 -- With the theory's chain operations as the code that runs, each runtime operation returns a NORMAL chain, one
 -- with no leading zero limb: badd pads each operand by the other's length, so without a normal form a chain's
