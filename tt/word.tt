@@ -1957,10 +1957,8 @@ def nmul_val : (x y : WB) -> Path Nat (wbval (nmul x y)) (mul (wbval x) (wbval y
 def limbPowGo (x : WB) : Nat -> Word -> Word -> WB -> WB :=
   elim Nat (\_ -> Word -> Word -> WB -> WB)
     (\t w acc -> acc)
-    (\_ ih -> \t w acc -> elim Bool (\_ -> Unit -> WB)
-       (\_ -> ih (fst (wdivmod t 2)) w (nmul acc acc))
-       (\_ -> ih (fst (wdivmod t 2)) (wsub w t) (nmul (nmul acc acc) x))
-       (wlt w t) tt)
+    (\_ ih -> \t w acc -> elim Bool (\_ -> WB) (ih (fst (wdivmod t 2)) w (nmul acc acc)) (ih (fst (wdivmod t 2)) (wsub w t) (nmul (nmul acc acc) x))
+       (wlt w t))
 def limbPow (x acc : WB) (w : Word) : WB := limbPowGo x 64 9223372036854775808 w acc
 def bpowGo (x : WB) : WB -> WB -> WB := elim List (\_ -> WB -> WB) (\acc -> acc) (\l r ih -> \acc -> ih (limbPow x acc l))
 def bpow_wb (x e : WB) : WB := bpowGo x e wone
@@ -2038,7 +2036,7 @@ def limbPowGo_val : (x : WB) (f : Nat) (t w : Word) (acc : WB) -> Path Nat (wlim
       let W : Nat := wlimb w in
       let A : Nat := wbval acc in
       let X : Nat := wbval x in
-      elim Bool (\c -> Path Bool (wlt w t) c -> Path Nat (wbval (elim Bool (\_ -> Unit -> WB) (\_ -> nmul acc acc) (\_ -> nmul (nmul acc acc) x) c tt)) (mul (pow A 2) (pow X W)))
+      elim Bool (\c -> Path Bool (wlt w t) c -> Path Nat (wbval (elim Bool (\_ -> WB) (nmul acc acc) (nmul (nmul acc acc) x) c)) (mul (pow A 2) (pow X W)))
         (\hlt ->
           let hW0 : Path Nat W 0 := lt1_zero W (substId (\v -> Lt W v) (pathToId ht) (wlt_true w t hlt)) in
           compPath Nat (wbval (nmul acc acc)) (mul A A) (mul (pow A 2) (pow X W))
@@ -2066,7 +2064,7 @@ def limbPowGo_val : (x : WB) (f : Nat) (t w : Word) (acc : WB) -> Path Nat (wlim
       let N : Nat := pow 2 (suc f) in
       let t' : Word := fst (wdivmod t 2) in
       let ht' : Path Nat (wlimb t') (pow 2 f) := wlimb_wdiv2 t f ht in
-      elim Bool (\c -> Path Bool (wlt w t) c -> Path Nat (wbval (elim Bool (\_ -> Unit -> WB) (\_ -> limbPowGo x (suc f) t' w (nmul acc acc)) (\_ -> limbPowGo x (suc f) t' (wsub w t) (nmul (nmul acc acc) x)) c tt)) (mul (pow A (pow 2 (suc (suc f)))) (pow X W)))
+      elim Bool (\c -> Path Bool (wlt w t) c -> Path Nat (wbval (elim Bool (\_ -> WB) (limbPowGo x (suc f) t' w (nmul acc acc)) (limbPowGo x (suc f) t' (wsub w t) (nmul (nmul acc acc) x)) c)) (mul (pow A (pow 2 (suc (suc f)))) (pow X W)))
         (\hlt ->
           let hw' : Lt W N := substId (\v -> Lt W v) (pathToId ht) (wlt_true w t hlt) in
           compPath Nat (wbval (limbPowGo x (suc f) t' w (nmul acc acc))) (mul (pow (wbval (nmul acc acc)) N) (pow X W)) (mul (pow A (pow 2 (suc (suc f)))) (pow X W))
@@ -2166,10 +2164,8 @@ def divBit (y : WB) (b : Nat) (qr : Sigma WB (\_ -> WB)) : Sigma WB (\_ -> WB) :
 def divLimbGo (y : WB) : Nat -> Word -> Word -> Sigma WB (\_ -> WB) -> Sigma WB (\_ -> WB) :=
   elim Nat (\_ -> Word -> Word -> Sigma WB (\_ -> WB) -> Sigma WB (\_ -> WB))
     (\t w qr -> qr)
-    (\_ ih -> \t w qr -> elim Bool (\_ -> Unit -> Sigma WB (\_ -> WB))
-       (\_ -> ih (fst (wdivmod t 2)) w (divBit y 0 qr))
-       (\_ -> ih (fst (wdivmod t 2)) (wsub w t) (divBit y 1 qr))
-       (wlt w t) tt)
+    (\_ ih -> \t w qr -> elim Bool (\_ -> Sigma WB (\_ -> WB)) (ih (fst (wdivmod t 2)) w (divBit y 0 qr)) (ih (fst (wdivmod t 2)) (wsub w t) (divBit y 1 qr))
+       (wlt w t))
 def divLimb (y : WB) (qr : Sigma WB (\_ -> WB)) (w : Word) : Sigma WB (\_ -> WB) := divLimbGo y 64 9223372036854775808 w qr
 def divGo (y : WB) : WB -> Sigma WB (\_ -> WB) -> Sigma WB (\_ -> WB) :=
   elim List (\_ -> Sigma WB (\_ -> WB) -> Sigma WB (\_ -> WB)) (\qr -> qr) (\l r ih -> \qr -> ih (divLimb y qr l))
@@ -2312,10 +2308,10 @@ def divLimbGo_inv : (y : WB) (f : Nat) (t w : Word) (qr : Sigma WB (\_ -> WB)) (
       let W : Nat := wlimb w in
       let Y : Nat := wbval y in
       elim Bool (\c -> Path Bool (wlt w t) c ->
-            Sigma (Path Nat (add (mul (wbval (fst (elim Bool (\_ -> Unit -> Sigma WB (\_ -> WB)) (\_ -> divLimbGo y 0 (fst (wdivmod t 2)) w (divBit y 0 qr)) (\_ -> divLimbGo y 0 (fst (wdivmod t 2)) (wsub w t) (divBit y 1 qr)) c tt))) Y)
-                                 (wbval (snd (elim Bool (\_ -> Unit -> Sigma WB (\_ -> WB)) (\_ -> divLimbGo y 0 (fst (wdivmod t 2)) w (divBit y 0 qr)) (\_ -> divLimbGo y 0 (fst (wdivmod t 2)) (wsub w t) (divBit y 1 qr)) c tt))))
+            Sigma (Path Nat (add (mul (wbval (fst (elim Bool (\_ -> Sigma WB (\_ -> WB)) (divLimbGo y 0 (fst (wdivmod t 2)) w (divBit y 0 qr)) (divLimbGo y 0 (fst (wdivmod t 2)) (wsub w t) (divBit y 1 qr)) c))) Y)
+                                 (wbval (snd (elim Bool (\_ -> Sigma WB (\_ -> WB)) (divLimbGo y 0 (fst (wdivmod t 2)) w (divBit y 0 qr)) (divLimbGo y 0 (fst (wdivmod t 2)) (wsub w t) (divBit y 1 qr)) c))))
                             (add (mul V (pow 2 1)) W))
-                  (\_ -> Lt (wbval (snd (elim Bool (\_ -> Unit -> Sigma WB (\_ -> WB)) (\_ -> divLimbGo y 0 (fst (wdivmod t 2)) w (divBit y 0 qr)) (\_ -> divLimbGo y 0 (fst (wdivmod t 2)) (wsub w t) (divBit y 1 qr)) c tt))) Y))
+                  (\_ -> Lt (wbval (snd (elim Bool (\_ -> Sigma WB (\_ -> WB)) (divLimbGo y 0 (fst (wdivmod t 2)) w (divBit y 0 qr)) (divLimbGo y 0 (fst (wdivmod t 2)) (wsub w t) (divBit y 1 qr)) c))) Y))
         (\hlt ->
           let hW0 : Path Nat W 0 := lt1_zero W (substId (\v -> Lt W v) (pathToId ht) (wlt_true w t hlt)) in
           let ib : Sigma (Path Nat (add (mul (wbval (fst (divBit y 0 qr))) Y) (wbval (snd (divBit y 0 qr)))) (add (mul 2 V) 0)) (\_ -> Lt (wbval (snd (divBit y 0 qr))) Y) :=
@@ -2347,10 +2343,10 @@ def divLimbGo_inv : (y : WB) (f : Nat) (t w : Word) (qr : Sigma WB (\_ -> WB)) (
       let hVN : Path Nat (mul (mul 2 V) N) (mul V (mul 2 N)) :=
         compPath Nat (mul (mul 2 V) N) (mul (mul V 2) N) (mul V (mul 2 N)) (cong Nat Nat (\v -> mul v N) (mul 2 V) (mul V 2) (mul_comm 2 V)) (mul_assoc V 2 N) in
       elim Bool (\c -> Path Bool (wlt w t) c ->
-            Sigma (Path Nat (add (mul (wbval (fst (elim Bool (\_ -> Unit -> Sigma WB (\_ -> WB)) (\_ -> divLimbGo y (suc f) t' w (divBit y 0 qr)) (\_ -> divLimbGo y (suc f) t' (wsub w t) (divBit y 1 qr)) c tt))) Y)
-                                 (wbval (snd (elim Bool (\_ -> Unit -> Sigma WB (\_ -> WB)) (\_ -> divLimbGo y (suc f) t' w (divBit y 0 qr)) (\_ -> divLimbGo y (suc f) t' (wsub w t) (divBit y 1 qr)) c tt))))
+            Sigma (Path Nat (add (mul (wbval (fst (elim Bool (\_ -> Sigma WB (\_ -> WB)) (divLimbGo y (suc f) t' w (divBit y 0 qr)) (divLimbGo y (suc f) t' (wsub w t) (divBit y 1 qr)) c))) Y)
+                                 (wbval (snd (elim Bool (\_ -> Sigma WB (\_ -> WB)) (divLimbGo y (suc f) t' w (divBit y 0 qr)) (divLimbGo y (suc f) t' (wsub w t) (divBit y 1 qr)) c))))
                             (add (mul V (pow 2 (suc (suc f)))) W))
-                  (\_ -> Lt (wbval (snd (elim Bool (\_ -> Unit -> Sigma WB (\_ -> WB)) (\_ -> divLimbGo y (suc f) t' w (divBit y 0 qr)) (\_ -> divLimbGo y (suc f) t' (wsub w t) (divBit y 1 qr)) c tt))) Y))
+                  (\_ -> Lt (wbval (snd (elim Bool (\_ -> Sigma WB (\_ -> WB)) (divLimbGo y (suc f) t' w (divBit y 0 qr)) (divLimbGo y (suc f) t' (wsub w t) (divBit y 1 qr)) c))) Y))
         (\hlt ->
           let hw' : Lt W N := substId (\v -> Lt W v) (pathToId ht) (wlt_true w t hlt) in
           let ib : Sigma (Path Nat (add (mul (wbval (fst (divBit y 0 qr))) Y) (wbval (snd (divBit y 0 qr)))) (add (mul 2 V) 0)) (\_ -> Lt (wbval (snd (divBit y 0 qr))) Y) :=
@@ -2472,10 +2468,8 @@ def bdivmod_wb_val : (x y : WB) -> Sigma (Path Nat (wbval (bdiv_wb x y)) (div (w
 def limbPowModGo (x m : WB) : Nat -> Word -> Word -> WB -> WB :=
   elim Nat (\_ -> Word -> Word -> WB -> WB)
     (\t w acc -> acc)
-    (\_ ih -> \t w acc -> elim Bool (\_ -> Unit -> WB)
-       (\_ -> ih (fst (wdivmod t 2)) w (bmod_wb (nmul acc acc) m))
-       (\_ -> ih (fst (wdivmod t 2)) (wsub w t) (bmod_wb (nmul (bmod_wb (nmul acc acc) m) x) m))
-       (wlt w t) tt)
+    (\_ ih -> \t w acc -> elim Bool (\_ -> WB) (ih (fst (wdivmod t 2)) w (bmod_wb (nmul acc acc) m)) (ih (fst (wdivmod t 2)) (wsub w t) (bmod_wb (nmul (bmod_wb (nmul acc acc) m) x) m))
+       (wlt w t))
 def limbPowMod (x m acc : WB) (w : Word) : WB := limbPowModGo x m 64 9223372036854775808 w acc
 def bpowModGo (x m : WB) : WB -> WB -> WB := elim List (\_ -> WB -> WB) (\acc -> acc) (\l r ih -> \acc -> ih (limbPowMod x m acc l))
 def bpowmod_wb (x e m : WB) : WB := bpowModGo x m e (bmod_wb wone m)
@@ -2545,7 +2539,7 @@ def limbPowModGo_val : (x m : WB) (m' : Nat) -> Path Nat (suc m') (wbval m) -> (
       let M : Nat := suc m' in
       let hsq : Path Nat (wbval (bmod_wb (nmul acc acc) m)) (mod (mul A A) M) :=
         compPath Nat (wbval (bmod_wb (nmul acc acc) m)) (mod (wbval (nmul acc acc)) M) (mod (mul A A) M) (bmod_val_s (nmul acc acc) m m' hm) (cong Nat Nat (\v -> mod v M) (wbval (nmul acc acc)) (mul A A) (nmul_val acc acc)) in
-      elim Bool (\c -> Path Bool (wlt w t) c -> Path Nat (wbval (elim Bool (\_ -> Unit -> WB) (\_ -> bmod_wb (nmul acc acc) m) (\_ -> bmod_wb (nmul (bmod_wb (nmul acc acc) m) x) m) c tt)) (mod (mul (pow A 2) (pow X W)) M))
+      elim Bool (\c -> Path Bool (wlt w t) c -> Path Nat (wbval (elim Bool (\_ -> WB) (bmod_wb (nmul acc acc) m) (bmod_wb (nmul (bmod_wb (nmul acc acc) m) x) m) c)) (mod (mul (pow A 2) (pow X W)) M))
         (\hlt ->
           let hW0 : Path Nat W 0 := lt1_zero W (substId (\v -> Lt W v) (pathToId ht) (wlt_true w t hlt)) in
           compPath Nat (wbval (bmod_wb (nmul acc acc) m)) (mod (mul A A) M) (mod (mul (pow A 2) (pow X W)) M)
@@ -2582,7 +2576,7 @@ def limbPowModGo_val : (x m : WB) (m' : Nat) -> Path Nat (suc m') (wbval m) -> (
       let ht' : Path Nat (wlimb t') (pow 2 f) := wlimb_wdiv2 t f ht in
       let hsq : Path Nat (wbval (bmod_wb (nmul acc acc) m)) (mod (mul A A) M) :=
         compPath Nat (wbval (bmod_wb (nmul acc acc) m)) (mod (wbval (nmul acc acc)) M) (mod (mul A A) M) (bmod_val_s (nmul acc acc) m m' hm) (cong Nat Nat (\v -> mod v M) (wbval (nmul acc acc)) (mul A A) (nmul_val acc acc)) in
-      elim Bool (\c -> Path Bool (wlt w t) c -> Path Nat (wbval (elim Bool (\_ -> Unit -> WB) (\_ -> limbPowModGo x m (suc f) t' w (bmod_wb (nmul acc acc) m)) (\_ -> limbPowModGo x m (suc f) t' (wsub w t) (bmod_wb (nmul (bmod_wb (nmul acc acc) m) x) m)) c tt)) (mod (mul (pow A (pow 2 (suc (suc f)))) (pow X W)) M))
+      elim Bool (\c -> Path Bool (wlt w t) c -> Path Nat (wbval (elim Bool (\_ -> WB) (limbPowModGo x m (suc f) t' w (bmod_wb (nmul acc acc) m)) (limbPowModGo x m (suc f) t' (wsub w t) (bmod_wb (nmul (bmod_wb (nmul acc acc) m) x) m)) c)) (mod (mul (pow A (pow 2 (suc (suc f)))) (pow X W)) M))
         (\hlt ->
           let hw' : Lt W N := substId (\v -> Lt W v) (pathToId ht) (wlt_true w t hlt) in
           let acc0 : WB := bmod_wb (nmul acc acc) m in
