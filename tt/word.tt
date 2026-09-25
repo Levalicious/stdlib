@@ -1904,9 +1904,9 @@ def limbPowGo (x : WB) : Nat -> Word -> Word -> WB -> WB :=
   elim Nat (\_ -> Word -> Word -> WB -> WB)
     (\t w acc -> acc)
     (\_ ih -> \t w acc -> elim Nat (\_ -> WB)
-       (ih (fst (wdivmod t 2)) w (nmul acc acc))
-       (\_ _ -> ih (fst (wdivmod t 2)) (wsub w t) (nmul (nmul acc acc) x))
-       (ble (wlimb t) (wlimb w)))
+       (ih (fst (wdivmod t 2)) (wsub w t) (nmul (nmul acc acc) x))
+       (\_ _ -> ih (fst (wdivmod t 2)) w (nmul acc acc))
+       (blt (wlimb w) (wlimb t)))
 def limbPow (x acc : WB) (w : Word) : WB := limbPowGo x 64 9223372036854775808 w acc
 def bpowGo (x : WB) : WB -> WB -> WB := elim List (\_ -> WB -> WB) (\acc -> acc) (\l r ih -> \acc -> ih (limbPow x acc l))
 def bpow_wb (x e : WB) : WB := bpowGo x e wone
@@ -1984,17 +1984,9 @@ def limbPowGo_val : (x : WB) (f : Nat) (t w : Word) (acc : WB) -> Path Nat (wlim
       let W : Nat := wlimb w in
       let A : Nat := wbval acc in
       let X : Nat := wbval x in
-      elim Nat (\m -> Path Nat (ble T W) m -> Path Nat (wbval (elim Nat (\_ -> WB) (nmul acc acc) (\_ _ -> nmul (nmul acc acc) x) m)) (mul (pow A 2) (pow X W)))
+      elim Nat (\m -> Path Nat (blt W T) m -> Path Nat (wbval (elim Nat (\_ -> WB) (nmul (nmul acc acc) x) (\_ _ -> nmul acc acc) m)) (mul (pow A 2) (pow X W)))
         (\h0 ->
-          let hW0 : Path Nat W 0 := lt1_zero W (le_ble (suc W) 1 (substId (\v -> Le (suc W) v) (pathToId ht) (ble_not T W (pathToId h0)))) in
-          compPath Nat (wbval (nmul acc acc)) (mul A A) (mul (pow A 2) (pow X W))
-            (nmul_val acc acc)
-            (sym Nat (mul (pow A 2) (pow X W)) (mul A A)
-               (compPath Nat (mul (pow A 2) (pow X W)) (mul (pow A 2) 1) (mul A A)
-                  (cong Nat Nat (\v -> mul (pow A 2) (pow X v)) W 0 hW0)
-                  (compPath Nat (mul (pow A 2) 1) (pow A 2) (mul A A) (mul_one_r (pow A 2)) (a_sq A)))))
-        (\k _ -> \hk ->
-          let hW1 : Path Nat W 1 := lt2_one W (substId (\v -> Le v W) (pathToId ht) (ble_le T W (ble_ones T W k (pathToId hk)))) hw in
+          let hW1 : Path Nat W 1 := lt2_one W (substId (\v -> Le v W) (pathToId ht) (le_suc_suc T W (ble_not (suc W) T (pathToId h0)))) hw in
           compPath Nat (wbval (nmul (nmul acc acc) x)) (mul (mul A A) X) (mul (pow A 2) (pow X W))
             (compPath Nat (wbval (nmul (nmul acc acc) x)) (mul (wbval (nmul acc acc)) X) (mul (mul A A) X)
                (nmul_val (nmul acc acc) x)
@@ -2003,7 +1995,15 @@ def limbPowGo_val : (x : WB) (f : Nat) (t w : Word) (acc : WB) -> Path Nat (wlim
                (compPath Nat (mul (pow A 2) (pow X W)) (mul (pow A 2) X) (mul (mul A A) X)
                   (cong Nat Nat (\v -> mul (pow A 2) v) (pow X W) X (compPath Nat (pow X W) (pow X 1) X (cong Nat Nat (pow X) W 1 hW1) (pow_one X)))
                   (cong Nat Nat (\v -> mul v X) (pow A 2) (mul A A) (a_sq A)))))
-        (ble T W) (prefl Nat (ble T W)))
+        (\k _ -> \hk ->
+          let hW0 : Path Nat W 0 := lt1_zero W (substId (\v -> Lt W v) (pathToId ht) (ble_ones (suc W) T k (pathToId hk))) in
+          compPath Nat (wbval (nmul acc acc)) (mul A A) (mul (pow A 2) (pow X W))
+            (nmul_val acc acc)
+            (sym Nat (mul (pow A 2) (pow X W)) (mul A A)
+               (compPath Nat (mul (pow A 2) (pow X W)) (mul (pow A 2) 1) (mul A A)
+                  (cong Nat Nat (\v -> mul (pow A 2) (pow X v)) W 0 hW0)
+                  (compPath Nat (mul (pow A 2) 1) (pow A 2) (mul A A) (mul_one_r (pow A 2)) (a_sq A)))))
+        (blt W T) (prefl Nat (blt W T)))
     (\f ih -> \t w acc ht hw ->
       let T : Nat := wlimb t in
       let W : Nat := wlimb w in
@@ -2012,17 +2012,9 @@ def limbPowGo_val : (x : WB) (f : Nat) (t w : Word) (acc : WB) -> Path Nat (wlim
       let N : Nat := pow 2 (suc f) in
       let t' : Word := fst (wdivmod t 2) in
       let ht' : Path Nat (wlimb t') (pow 2 f) := wlimb_wdiv2 t f ht in
-      elim Nat (\m -> Path Nat (ble T W) m -> Path Nat (wbval (elim Nat (\_ -> WB) (limbPowGo x (suc f) t' w (nmul acc acc)) (\_ _ -> limbPowGo x (suc f) t' (wsub w t) (nmul (nmul acc acc) x)) m)) (mul (pow A (pow 2 (suc (suc f)))) (pow X W)))
+      elim Nat (\m -> Path Nat (blt W T) m -> Path Nat (wbval (elim Nat (\_ -> WB) (limbPowGo x (suc f) t' (wsub w t) (nmul (nmul acc acc) x)) (\_ _ -> limbPowGo x (suc f) t' w (nmul acc acc)) m)) (mul (pow A (pow 2 (suc (suc f)))) (pow X W)))
         (\h0 ->
-          let hw' : Lt W N := le_ble (suc W) N (substId (\v -> Le (suc W) v) (pathToId ht) (ble_not T W (pathToId h0))) in
-          compPath Nat (wbval (limbPowGo x (suc f) t' w (nmul acc acc))) (mul (pow (wbval (nmul acc acc)) N) (pow X W)) (mul (pow A (pow 2 (suc (suc f)))) (pow X W))
-            (ih t' w (nmul acc acc) ht' hw')
-            (cong Nat Nat (\v -> mul v (pow X W)) (pow (wbval (nmul acc acc)) N) (pow A (pow 2 (suc (suc f))))
-               (compPath Nat (pow (wbval (nmul acc acc)) N) (pow (mul A A) N) (pow A (mul 2 N))
-                  (cong Nat Nat (\v -> pow v N) (wbval (nmul acc acc)) (mul A A) (nmul_val acc acc))
-                  (pow_sq A N))))
-        (\k _ -> \hk ->
-          let hTW : Le T W := ble_le T W (ble_ones T W k (pathToId hk)) in
+          let hTW : Le T W := le_suc_suc T W (ble_not (suc W) T (pathToId h0)) in
           let d : Nat := fst hTW in
           let hd : Path Nat (add T d) W := snd hTW in
           let hsub : Path Nat (wlimb (wsub w t)) d :=
@@ -2057,7 +2049,15 @@ def limbPowGo_val : (x : WB) (f : Nat) (t w : Word) (acc : WB) -> Path Nat (wlim
                      (compPath Nat (mul (pow X N) (pow X d)) (pow X (add N d)) (pow X W)
                         (sym Nat (pow X (add N d)) (mul (pow X N) (pow X d)) (pow_add X N d))
                         (cong Nat Nat (pow X) (add N d) W (compPath Nat (add N d) (add T d) W (cong Nat Nat (\v -> add v d) N T (sym Nat T N ht)) hd)))))))
-        (ble T W) (prefl Nat (ble T W)))
+        (\k _ -> \hk ->
+          let hw' : Lt W N := substId (\v -> Lt W v) (pathToId ht) (ble_ones (suc W) T k (pathToId hk)) in
+          compPath Nat (wbval (limbPowGo x (suc f) t' w (nmul acc acc))) (mul (pow (wbval (nmul acc acc)) N) (pow X W)) (mul (pow A (pow 2 (suc (suc f)))) (pow X W))
+            (ih t' w (nmul acc acc) ht' hw')
+            (cong Nat Nat (\v -> mul v (pow X W)) (pow (wbval (nmul acc acc)) N) (pow A (pow 2 (suc (suc f))))
+               (compPath Nat (pow (wbval (nmul acc acc)) N) (pow (mul A A) N) (pow A (mul 2 N))
+                  (cong Nat Nat (\v -> pow v N) (wbval (nmul acc acc)) (mul A A) (nmul_val acc acc))
+                  (pow_sq A N))))
+        (blt W T) (prefl Nat (blt W T)))
 def limbPow_val : (x acc : WB) (w : Word) -> Path Nat (wbval (limbPow x acc w)) (mul (pow (wbval acc) M64) (pow (wbval x) (wlimb w))) :=
   \x acc w -> limbPowGo_val x 63 9223372036854775808 w acc (prefl Nat 9223372036854775808) (snd w)
 def bpowGo_val : (x e acc : WB) -> Path Nat (wbval (bpowGo x e acc)) (mul (pow (wbval acc) (wpow (wlen e))) (pow (wbval x) (wbval e))) :=
@@ -2100,3 +2100,313 @@ def bpow_wb_val : (x e : WB) -> Path Nat (wbval (bpow_wb x e)) (pow (wbval x) (w
              (cong Nat Nat (\v -> pow v (wpow (wlen e))) (wbval wone) 1 wbval_wone)
              (one_pow (wpow (wlen e)))))
        (one_mul (pow (wbval x) (wbval e))))
+-- ---- the Euclidean division, bit-serial (S6.4) ----
+-- Long division one bit at a time, from the dividend's most significant end: the remainder takes the next bit
+-- (r := 2r + b) and, when the divisor fits, gives it up (r := r - y) while the quotient takes a one bit; else the
+-- quotient takes a zero bit. The dividend's bits are peeled exactly as the power peels the exponent's. A zero
+-- divisor answers (0, x), as the prelude's div and mod do, so the value laws hold for every divisor.
+def divBit (y : WB) (b : Nat) (qr : Sigma WB (\_ -> WB)) : Sigma WB (\_ -> WB) :=
+  let r1 : WB := nadd (nadd (snd qr) (snd qr)) (elim Nat (\_ -> WB) (lnil {Word}) (\_ _ -> wone) b) in
+  let q2 : WB := nadd (fst qr) (fst qr) in
+  elim Nat (\_ -> Sigma WB (\_ -> WB)) (q2, r1) (\_ _ -> (nadd q2 wone, nsub r1 y)) (ble_wb y r1)
+def divLimbGo (y : WB) : Nat -> Word -> Word -> Sigma WB (\_ -> WB) -> Sigma WB (\_ -> WB) :=
+  elim Nat (\_ -> Word -> Word -> Sigma WB (\_ -> WB) -> Sigma WB (\_ -> WB))
+    (\t w qr -> qr)
+    (\_ ih -> \t w qr -> elim Nat (\_ -> Sigma WB (\_ -> WB))
+       (ih (fst (wdivmod t 2)) (wsub w t) (divBit y 1 qr))
+       (\_ _ -> ih (fst (wdivmod t 2)) w (divBit y 0 qr))
+       (blt (wlimb w) (wlimb t)))
+def divLimb (y : WB) (qr : Sigma WB (\_ -> WB)) (w : Word) : Sigma WB (\_ -> WB) := divLimbGo y 64 9223372036854775808 w qr
+def divGo (y : WB) : WB -> Sigma WB (\_ -> WB) -> Sigma WB (\_ -> WB) :=
+  elim List (\_ -> Sigma WB (\_ -> WB) -> Sigma WB (\_ -> WB)) (\qr -> qr) (\l r ih -> \qr -> ih (divLimb y qr l))
+def bdivmod_wb (x y : WB) : Sigma WB (\_ -> WB) :=
+  elim Nat (\_ -> Sigma WB (\_ -> WB)) (divGo y x (lnil {Word}, lnil {Word})) (\_ _ -> (lnil {Word}, x)) (bisz y)
+def bdiv_wb (x y : WB) : WB := fst (bdivmod_wb x y)
+def bmod_wb (x y : WB) : WB := snd (bdivmod_wb x y)
+-- ---- the division's law ----
+def add_shuffle4 : (a b c d : Nat) -> Path Nat (add (add a b) (add c d)) (add (add a c) (add b d)) :=
+  \a b c d -> compPath Nat (add (add a b) (add c d)) (add a (add b (add c d))) (add (add a c) (add b d))
+    (add_assoc a b (add c d))
+    (compPath Nat (add a (add b (add c d))) (add a (add (add b c) d)) (add (add a c) (add b d))
+       (cong Nat Nat (add a) (add b (add c d)) (add (add b c) d) (sym Nat (add (add b c) d) (add b (add c d)) (add_assoc b c d)))
+       (compPath Nat (add a (add (add b c) d)) (add a (add (add c b) d)) (add (add a c) (add b d))
+          (cong Nat Nat (\v -> add a (add v d)) (add b c) (add c b) (add_comm b c))
+          (compPath Nat (add a (add (add c b) d)) (add a (add c (add b d))) (add (add a c) (add b d))
+             (cong Nat Nat (add a) (add (add c b) d) (add c (add b d)) (add_assoc c b d))
+             (sym Nat (add (add a c) (add b d)) (add a (add c (add b d))) (add_assoc a c (add b d))))))
+def isZero_zero_of_suc : (n k : Nat) -> Path Nat (isZero n) (suc k) -> Path Nat n 0 :=
+  \n k -> elim Nat (\n -> Path Nat (isZero n) (suc k) -> Path Nat n 0) (\_ -> prefl Nat 0) (\m _ -> \h -> elim Empty (\_ -> Path Nat (suc m) 0) (znots h)) n
+def isZero_suc_of_zero : (n : Nat) -> Path Nat (isZero n) 0 -> Path Nat n (suc (pred n)) :=
+  \n -> elim Nat (\n -> Path Nat (isZero n) 0 -> Path Nat n (suc (pred n))) (\h -> elim Empty (\_ -> Path Nat 0 (suc (pred 0))) (snotz h)) (\m _ -> \_ -> prefl Nat (suc m)) n
+-- the bit chain's value is the bit
+def bitchain_val : (b : Nat) -> Le b 1 -> Path Nat (wbval (elim Nat (\_ -> WB) (lnil {Word}) (\_ _ -> wone) b)) b :=
+  \b -> elim Nat (\b -> Le b 1 -> Path Nat (wbval (elim Nat (\_ -> WB) (lnil {Word}) (\_ _ -> wone) b)) b)
+    (\_ -> prefl Nat 0)
+    (\k _ -> \hb -> compPath Nat (wbval wone) 1 (suc k) wbval_wone
+       (cong Nat Nat suc 0 k (le_antisym 0 k (k, prefl Nat k) (le_suc_suc k 0 hb))))
+    b
+-- (R + R) + 2 = (R + 1) + (R + 1)
+def two_r_plus_two : (R : Nat) -> Path Nat (add (add R R) 2) (add (suc R) (suc R)) :=
+  \R -> compPath Nat (add (add R R) 2) (suc (suc (add R R))) (add (suc R) (suc R))
+    (compPath Nat (add (add R R) 2) (suc (add (add R R) 1)) (suc (suc (add R R)))
+       (add_suc_r (add R R) 1)
+       (cong Nat Nat suc (add (add R R) 1) (suc (add R R))
+          (compPath Nat (add (add R R) 1) (suc (add (add R R) 0)) (suc (add R R))
+             (add_suc_r (add R R) 0)
+             (cong Nat Nat suc (add (add R R) 0) (add R R) (add_zero_r (add R R))))))
+    (sym Nat (add (suc R) (suc R)) (suc (suc (add R R))) (cong Nat Nat suc (add R (suc R)) (suc (add R R)) (add_suc_r R R)))
+-- one bit into the remainder and quotient, by the values: from Q*Y + R = V and R < Y, after the bit b the pair
+-- satisfies Q'*Y + R' = 2V + b and R' < Y. The decision ble_wb y r1 is split with its equation; when the
+-- divisor fits, R1 = Y + d and the new remainder is d, below Y because R1 < 2Y.
+def divBit_inv : (y : WB) (b : Nat) -> Le b 1 -> (qr : Sigma WB (\_ -> WB)) (V : Nat)
+    -> Path Nat (add (mul (wbval (fst qr)) (wbval y)) (wbval (snd qr))) V -> Lt (wbval (snd qr)) (wbval y)
+    -> Sigma (Path Nat (add (mul (wbval (fst (divBit y b qr))) (wbval y)) (wbval (snd (divBit y b qr)))) (add (mul 2 V) b))
+             (\_ -> Lt (wbval (snd (divBit y b qr))) (wbval y)) :=
+  \y b hb qr V hI hR ->
+  let Y : Nat := wbval y in
+  let Q : Nat := wbval (fst qr) in
+  let R : Nat := wbval (snd qr) in
+  let bc : WB := elim Nat (\_ -> WB) (lnil {Word}) (\_ _ -> wone) b in
+  let r1 : WB := nadd (nadd (snd qr) (snd qr)) bc in
+  let q2 : WB := nadd (fst qr) (fst qr) in
+  let R1 : Nat := wbval r1 in
+  let Q2 : Nat := wbval q2 in
+  let hR1 : Path Nat R1 (add (add R R) b) :=
+    compPath Nat R1 (add (wbval (nadd (snd qr) (snd qr))) (wbval bc)) (add (add R R) b)
+      (nadd_val (nadd (snd qr) (snd qr)) bc)
+      (compPath Nat (add (wbval (nadd (snd qr) (snd qr))) (wbval bc)) (add (add R R) (wbval bc)) (add (add R R) b)
+         (cong Nat Nat (\v -> add v (wbval bc)) (wbval (nadd (snd qr) (snd qr))) (add R R) (nadd_val (snd qr) (snd qr)))
+         (cong Nat Nat (\v -> add (add R R) v) (wbval bc) b (bitchain_val b hb))) in
+  let hQ2 : Path Nat Q2 (add Q Q) := nadd_val (fst qr) (fst qr) in
+  -- the equation of the no-borrow pair, shared by both cases: Q2*Y + R1 = 2V + b
+  let eq0 : Path Nat (add (mul Q2 Y) R1) (add (mul 2 V) b) :=
+    compPath Nat (add (mul Q2 Y) R1) (add (add (mul Q Y) (mul Q Y)) (add (add R R) b)) (add (mul 2 V) b)
+      (compPath Nat (add (mul Q2 Y) R1) (add (mul (add Q Q) Y) (add (add R R) b)) (add (add (mul Q Y) (mul Q Y)) (add (add R R) b))
+         (compPath Nat (add (mul Q2 Y) R1) (add (mul (add Q Q) Y) R1) (add (mul (add Q Q) Y) (add (add R R) b))
+            (cong Nat Nat (\v -> add (mul v Y) R1) Q2 (add Q Q) hQ2)
+            (cong Nat Nat (\v -> add (mul (add Q Q) Y) v) R1 (add (add R R) b) hR1))
+         (cong Nat Nat (\v -> add v (add (add R R) b)) (mul (add Q Q) Y) (add (mul Q Y) (mul Q Y)) (mul_dist_r Q Q Y)))
+      (compPath Nat (add (add (mul Q Y) (mul Q Y)) (add (add R R) b)) (add (add (add (mul Q Y) (mul Q Y)) (add R R)) b) (add (mul 2 V) b)
+         (sym Nat (add (add (add (mul Q Y) (mul Q Y)) (add R R)) b) (add (add (mul Q Y) (mul Q Y)) (add (add R R) b)) (add_assoc (add (mul Q Y) (mul Q Y)) (add R R) b))
+         (cong Nat Nat (\v -> add v b) (add (add (mul Q Y) (mul Q Y)) (add R R)) (mul 2 V)
+            (compPath Nat (add (add (mul Q Y) (mul Q Y)) (add R R)) (add (add (mul Q Y) R) (add (mul Q Y) R)) (mul 2 V)
+               (add_shuffle4 (mul Q Y) (mul Q Y) R R)
+               (compPath Nat (add (add (mul Q Y) R) (add (mul Q Y) R)) (add V V) (mul 2 V)
+                  (compPath Nat (add (add (mul Q Y) R) (add (mul Q Y) R)) (add V (add (mul Q Y) R)) (add V V)
+                     (cong Nat Nat (\v -> add v (add (mul Q Y) R)) (add (mul Q Y) R) V hI)
+                     (cong Nat Nat (\v -> add V v) (add (mul Q Y) R) V hI))
+                  (sym Nat (mul 2 V) (add V V) (mul_two V)))))) in
+  -- R1 < 2Y: R1 = (R + R) + b <= (R + R) + 2 = (R + 1) + (R + 1) <= Y + Y
+  let hR1lt : Le (suc R1) (add Y Y) :=
+    substId (\v -> Le (suc v) (add Y Y)) (pathToId (sym Nat R1 (add (add R R) b) hR1))
+      (substId (\v -> Le v (add Y Y)) (pathToId (add_suc_r (add R R) b))
+        (le_trans (add (add R R) (suc b)) (add (add R R) 2) (add Y Y)
+           (le_add_le (add R R) (add R R) (suc b) 2 (le_refl (add R R)) (le_suc_both b 1 hb))
+           (substId (\v -> Le v (add Y Y)) (pathToId (sym Nat (add (add R R) 2) (add (suc R) (suc R)) (two_r_plus_two R)))
+              (le_add_le (suc R) Y (suc R) Y (lt_le R Y hR) (lt_le R Y hR))))) in
+  elim Nat (\m -> Path Nat (ble_wb y r1) m ->
+        Sigma (Path Nat (add (mul (wbval (fst (elim Nat (\_ -> Sigma WB (\_ -> WB)) (q2, r1) (\_ _ -> (nadd q2 wone, nsub r1 y)) m))) Y)
+                                  (wbval (snd (elim Nat (\_ -> Sigma WB (\_ -> WB)) (q2, r1) (\_ _ -> (nadd q2 wone, nsub r1 y)) m)))) (add (mul 2 V) b))
+              (\_ -> Lt (wbval (snd (elim Nat (\_ -> Sigma WB (\_ -> WB)) (q2, r1) (\_ _ -> (nadd q2 wone, nsub r1 y)) m))) Y))
+    (\h0 ->
+      let hble : Path Nat (ble Y R1) 0 := compPath Nat (ble Y R1) (ble_wb y r1) 0 (sym Nat (ble_wb y r1) (ble Y R1) (ble_wb_val y r1)) h0 in
+      (eq0, le_ble (suc R1) Y (ble_not Y R1 (pathToId hble))))
+    (\k _ -> \hk ->
+      let hble : Path Nat (ble Y R1) (suc k) := compPath Nat (ble Y R1) (ble_wb y r1) (suc k) (sym Nat (ble_wb y r1) (ble Y R1) (ble_wb_val y r1)) hk in
+      let hYR : Le Y R1 := ble_le Y R1 (ble_ones Y R1 k (pathToId hble)) in
+      let d : Nat := fst hYR in
+      let hd : Path Nat (add Y d) R1 := snd hYR in
+      let hQ' : Path Nat (wbval (nadd q2 wone)) (add Q2 1) :=
+        compPath Nat (wbval (nadd q2 wone)) (add Q2 (wbval wone)) (add Q2 1) (nadd_val q2 wone) (cong Nat Nat (add Q2) (wbval wone) 1 wbval_wone) in
+      let hR' : Path Nat (wbval (nsub r1 y)) d :=
+        compPath Nat (wbval (nsub r1 y)) (sub R1 Y) d (nsub_val r1 y)
+          (compPath Nat (sub R1 Y) (sub (add Y d) Y) d (cong Nat Nat (\v -> sub v Y) R1 (add Y d) (sym Nat (add Y d) R1 hd)) (sub_add_d Y d)) in
+      let hdY : Lt d Y :=
+        le_ble (suc d) Y (le_cancel_l Y (suc d) Y
+          (substId (\v -> Le v (add Y Y)) (pathToId (sym Nat (add Y (suc d)) (suc (add Y d)) (add_suc_r Y d)))
+            (substId (\v -> Le (suc v) (add Y Y)) (pathToId (sym Nat (add Y d) R1 hd)) hR1lt))) in
+      (compPath Nat (add (mul (wbval (nadd q2 wone)) Y) (wbval (nsub r1 y))) (add (mul (add Q2 1) Y) d) (add (mul 2 V) b)
+         (compPath Nat (add (mul (wbval (nadd q2 wone)) Y) (wbval (nsub r1 y))) (add (mul (add Q2 1) Y) (wbval (nsub r1 y))) (add (mul (add Q2 1) Y) d)
+            (cong Nat Nat (\v -> add (mul v Y) (wbval (nsub r1 y))) (wbval (nadd q2 wone)) (add Q2 1) hQ')
+            (cong Nat Nat (\v -> add (mul (add Q2 1) Y) v) (wbval (nsub r1 y)) d hR'))
+         (compPath Nat (add (mul (add Q2 1) Y) d) (add (add (mul Q2 Y) Y) d) (add (mul 2 V) b)
+            (cong Nat Nat (\v -> add v d) (mul (add Q2 1) Y) (add (mul Q2 Y) Y)
+               (compPath Nat (mul (add Q2 1) Y) (add (mul Q2 Y) (mul 1 Y)) (add (mul Q2 Y) Y) (mul_dist_r Q2 1 Y) (cong Nat Nat (add (mul Q2 Y)) (mul 1 Y) Y (one_mul Y))))
+            (compPath Nat (add (add (mul Q2 Y) Y) d) (add (mul Q2 Y) (add Y d)) (add (mul 2 V) b)
+               (add_assoc (mul Q2 Y) Y d)
+               (compPath Nat (add (mul Q2 Y) (add Y d)) (add (mul Q2 Y) R1) (add (mul 2 V) b)
+                  (cong Nat Nat (add (mul Q2 Y)) (add Y d) R1 hd)
+                  eq0))),
+       substId (\v -> Lt v Y) (pathToId (sym Nat (wbval (nsub r1 y)) d hR')) hdY))
+    (ble_wb y r1) (prefl Nat (ble_wb y r1))
+-- the bit loop's invariant: with fuel f + 1, a threshold worth 2^f, a word below 2^(f+1), and a pair with
+-- Q*Y + R = V and R < Y, the loop returns a pair with Q'*Y + R' = V * 2^(f+1) + w and R' < Y: the processed
+-- bits are appended to V, each by divBit_inv.
+def divLimbGo_inv : (y : WB) (f : Nat) (t w : Word) (qr : Sigma WB (\_ -> WB)) (V : Nat)
+    -> Path Nat (wlimb t) (pow 2 f) -> .(hw : Lt (wlimb w) (pow 2 (suc f)))
+    -> Path Nat (add (mul (wbval (fst qr)) (wbval y)) (wbval (snd qr))) V -> Lt (wbval (snd qr)) (wbval y)
+    -> Sigma (Path Nat (add (mul (wbval (fst (divLimbGo y (suc f) t w qr))) (wbval y)) (wbval (snd (divLimbGo y (suc f) t w qr))))
+                       (add (mul V (pow 2 (suc f))) (wlimb w)))
+             (\_ -> Lt (wbval (snd (divLimbGo y (suc f) t w qr))) (wbval y)) :=
+  \y -> elim Nat (\f -> (t w : Word) (qr : Sigma WB (\_ -> WB)) (V : Nat) -> Path Nat (wlimb t) (pow 2 f) -> .(hw : Lt (wlimb w) (pow 2 (suc f)))
+                       -> Path Nat (add (mul (wbval (fst qr)) (wbval y)) (wbval (snd qr))) V -> Lt (wbval (snd qr)) (wbval y)
+                       -> Sigma (Path Nat (add (mul (wbval (fst (divLimbGo y (suc f) t w qr))) (wbval y)) (wbval (snd (divLimbGo y (suc f) t w qr))))
+                                          (add (mul V (pow 2 (suc f))) (wlimb w)))
+                                (\_ -> Lt (wbval (snd (divLimbGo y (suc f) t w qr))) (wbval y)))
+    (\t w qr V ht hw hI hR ->
+      let T : Nat := wlimb t in
+      let W : Nat := wlimb w in
+      let Y : Nat := wbval y in
+      elim Nat (\m -> Path Nat (blt W T) m ->
+            Sigma (Path Nat (add (mul (wbval (fst (elim Nat (\_ -> Sigma WB (\_ -> WB)) (divLimbGo y 0 (fst (wdivmod t 2)) (wsub w t) (divBit y 1 qr)) (\_ _ -> divLimbGo y 0 (fst (wdivmod t 2)) w (divBit y 0 qr)) m))) Y)
+                                 (wbval (snd (elim Nat (\_ -> Sigma WB (\_ -> WB)) (divLimbGo y 0 (fst (wdivmod t 2)) (wsub w t) (divBit y 1 qr)) (\_ _ -> divLimbGo y 0 (fst (wdivmod t 2)) w (divBit y 0 qr)) m))))
+                            (add (mul V (pow 2 1)) W))
+                  (\_ -> Lt (wbval (snd (elim Nat (\_ -> Sigma WB (\_ -> WB)) (divLimbGo y 0 (fst (wdivmod t 2)) (wsub w t) (divBit y 1 qr)) (\_ _ -> divLimbGo y 0 (fst (wdivmod t 2)) w (divBit y 0 qr)) m))) Y))
+        (\h0 ->
+          let hW1 : Path Nat W 1 := lt2_one W (substId (\v -> Le v W) (pathToId ht) (le_suc_suc T W (ble_not (suc W) T (pathToId h0)))) hw in
+          let ib : Sigma (Path Nat (add (mul (wbval (fst (divBit y 1 qr))) Y) (wbval (snd (divBit y 1 qr)))) (add (mul 2 V) 1)) (\_ -> Lt (wbval (snd (divBit y 1 qr))) Y) :=
+            divBit_inv y 1 (le_refl 1) qr V hI hR in
+          (compPath Nat (add (mul (wbval (fst (divBit y 1 qr))) Y) (wbval (snd (divBit y 1 qr)))) (add (mul 2 V) 1) (add (mul V 2) W)
+             (fst ib)
+             (compPath Nat (add (mul 2 V) 1) (add (mul V 2) 1) (add (mul V 2) W)
+                (cong Nat Nat (\v -> add v 1) (mul 2 V) (mul V 2) (mul_comm 2 V))
+                (cong Nat Nat (add (mul V 2)) 1 W (sym Nat W 1 hW1))),
+           snd ib))
+        (\k _ -> \hk ->
+          let hW0 : Path Nat W 0 := lt1_zero W (substId (\v -> Lt W v) (pathToId ht) (ble_ones (suc W) T k (pathToId hk))) in
+          let ib : Sigma (Path Nat (add (mul (wbval (fst (divBit y 0 qr))) Y) (wbval (snd (divBit y 0 qr)))) (add (mul 2 V) 0)) (\_ -> Lt (wbval (snd (divBit y 0 qr))) Y) :=
+            divBit_inv y 0 (1, prefl Nat 1) qr V hI hR in
+          (compPath Nat (add (mul (wbval (fst (divBit y 0 qr))) Y) (wbval (snd (divBit y 0 qr)))) (add (mul 2 V) 0) (add (mul V 2) W)
+             (fst ib)
+             (compPath Nat (add (mul 2 V) 0) (add (mul V 2) 0) (add (mul V 2) W)
+                (cong Nat Nat (\v -> add v 0) (mul 2 V) (mul V 2) (mul_comm 2 V))
+                (cong Nat Nat (add (mul V 2)) 0 W (sym Nat W 0 hW0))),
+           snd ib))
+        (blt W T) (prefl Nat (blt W T)))
+    (\f ih -> \t w qr V ht hw hI hR ->
+      let T : Nat := wlimb t in
+      let W : Nat := wlimb w in
+      let Y : Nat := wbval y in
+      let N : Nat := pow 2 (suc f) in
+      let t' : Word := fst (wdivmod t 2) in
+      let ht' : Path Nat (wlimb t') (pow 2 f) := wlimb_wdiv2 t f ht in
+      let hVN : Path Nat (mul (mul 2 V) N) (mul V (mul 2 N)) :=
+        compPath Nat (mul (mul 2 V) N) (mul (mul V 2) N) (mul V (mul 2 N)) (cong Nat Nat (\v -> mul v N) (mul 2 V) (mul V 2) (mul_comm 2 V)) (mul_assoc V 2 N) in
+      elim Nat (\m -> Path Nat (blt W T) m ->
+            Sigma (Path Nat (add (mul (wbval (fst (elim Nat (\_ -> Sigma WB (\_ -> WB)) (divLimbGo y (suc f) t' (wsub w t) (divBit y 1 qr)) (\_ _ -> divLimbGo y (suc f) t' w (divBit y 0 qr)) m))) Y)
+                                 (wbval (snd (elim Nat (\_ -> Sigma WB (\_ -> WB)) (divLimbGo y (suc f) t' (wsub w t) (divBit y 1 qr)) (\_ _ -> divLimbGo y (suc f) t' w (divBit y 0 qr)) m))))
+                            (add (mul V (pow 2 (suc (suc f)))) W))
+                  (\_ -> Lt (wbval (snd (elim Nat (\_ -> Sigma WB (\_ -> WB)) (divLimbGo y (suc f) t' (wsub w t) (divBit y 1 qr)) (\_ _ -> divLimbGo y (suc f) t' w (divBit y 0 qr)) m))) Y))
+        (\h0 ->
+          let hTW : Le T W := le_suc_suc T W (ble_not (suc W) T (pathToId h0)) in
+          let d : Nat := fst hTW in
+          let hd : Path Nat (add T d) W := snd hTW in
+          let hsub : Path Nat (wlimb (wsub w t)) d :=
+            compPath Nat (wlimb (wsub w t)) (sub W T) d (wsub_ge w t hTW)
+              (compPath Nat (sub W T) (sub (add T d) T) d (cong Nat Nat (\v -> sub v T) W (add T d) (sym Nat (add T d) W hd)) (sub_add_d T d)) in
+          let hdN : Lt d N :=
+            le_ble (suc d) N (le_cancel_l T (suc d) N
+              (substId (\v -> Le v (add T N)) (pathToId (sym Nat (add T (suc d)) (suc (add T d)) (add_suc_r T d)))
+                (substId (\v -> Le (suc v) (add T N)) (pathToId (sym Nat (add T d) W hd))
+                  (substId (\v -> Le (suc W) (add v N)) (pathToId (sym Nat T (pow 2 (suc f)) ht))
+                    (substId (\v -> Le (suc W) v) (pathToId (mul_two N)) (ble_le (suc W) (mul 2 N) hw)))))) in
+          let hw' : Lt (wlimb (wsub w t)) N := substId (\v -> Lt v N) (pathToId (sym Nat (wlimb (wsub w t)) d hsub)) hdN in
+          let ib : Sigma (Path Nat (add (mul (wbval (fst (divBit y 1 qr))) Y) (wbval (snd (divBit y 1 qr)))) (add (mul 2 V) 1)) (\_ -> Lt (wbval (snd (divBit y 1 qr))) Y) :=
+            divBit_inv y 1 (le_refl 1) qr V hI hR in
+          let ihr : Sigma (Path Nat (add (mul (wbval (fst (divLimbGo y (suc f) t' (wsub w t) (divBit y 1 qr)))) Y) (wbval (snd (divLimbGo y (suc f) t' (wsub w t) (divBit y 1 qr))))) (add (mul (add (mul 2 V) 1) N) (wlimb (wsub w t))))
+                          (\_ -> Lt (wbval (snd (divLimbGo y (suc f) t' (wsub w t) (divBit y 1 qr)))) Y) :=
+            ih t' (wsub w t) (divBit y 1 qr) (add (mul 2 V) 1) ht' hw' (fst ib) (snd ib) in
+          (compPath Nat (add (mul (wbval (fst (divLimbGo y (suc f) t' (wsub w t) (divBit y 1 qr)))) Y) (wbval (snd (divLimbGo y (suc f) t' (wsub w t) (divBit y 1 qr))))) (add (mul (add (mul 2 V) 1) N) (wlimb (wsub w t))) (add (mul V (mul 2 N)) W)
+             (fst ihr)
+             (compPath Nat (add (mul (add (mul 2 V) 1) N) (wlimb (wsub w t))) (add (mul (add (mul 2 V) 1) N) d) (add (mul V (mul 2 N)) W)
+                (cong Nat Nat (add (mul (add (mul 2 V) 1) N)) (wlimb (wsub w t)) d hsub)
+                (compPath Nat (add (mul (add (mul 2 V) 1) N) d) (add (add (mul (mul 2 V) N) N) d) (add (mul V (mul 2 N)) W)
+                   (cong Nat Nat (\v -> add v d) (mul (add (mul 2 V) 1) N) (add (mul (mul 2 V) N) N)
+                      (compPath Nat (mul (add (mul 2 V) 1) N) (add (mul (mul 2 V) N) (mul 1 N)) (add (mul (mul 2 V) N) N) (mul_dist_r (mul 2 V) 1 N) (cong Nat Nat (add (mul (mul 2 V) N)) (mul 1 N) N (one_mul N))))
+                   (compPath Nat (add (add (mul (mul 2 V) N) N) d) (add (mul (mul 2 V) N) (add N d)) (add (mul V (mul 2 N)) W)
+                      (add_assoc (mul (mul 2 V) N) N d)
+                      (compPath Nat (add (mul (mul 2 V) N) (add N d)) (add (mul V (mul 2 N)) (add N d)) (add (mul V (mul 2 N)) W)
+                         (cong Nat Nat (\v -> add v (add N d)) (mul (mul 2 V) N) (mul V (mul 2 N)) hVN)
+                         (cong Nat Nat (add (mul V (mul 2 N))) (add N d) W (compPath Nat (add N d) (add T d) W (cong Nat Nat (\v -> add v d) N T (sym Nat T N ht)) hd)))))),
+           snd ihr))
+        (\k _ -> \hk ->
+          let hw' : Lt W N := substId (\v -> Lt W v) (pathToId ht) (ble_ones (suc W) T k (pathToId hk)) in
+          let ib : Sigma (Path Nat (add (mul (wbval (fst (divBit y 0 qr))) Y) (wbval (snd (divBit y 0 qr)))) (add (mul 2 V) 0)) (\_ -> Lt (wbval (snd (divBit y 0 qr))) Y) :=
+            divBit_inv y 0 (1, prefl Nat 1) qr V hI hR in
+          let ihr : Sigma (Path Nat (add (mul (wbval (fst (divLimbGo y (suc f) t' w (divBit y 0 qr)))) Y) (wbval (snd (divLimbGo y (suc f) t' w (divBit y 0 qr))))) (add (mul (add (mul 2 V) 0) N) W))
+                          (\_ -> Lt (wbval (snd (divLimbGo y (suc f) t' w (divBit y 0 qr)))) Y) :=
+            ih t' w (divBit y 0 qr) (add (mul 2 V) 0) ht' hw' (fst ib) (snd ib) in
+          (compPath Nat (add (mul (wbval (fst (divLimbGo y (suc f) t' w (divBit y 0 qr)))) Y) (wbval (snd (divLimbGo y (suc f) t' w (divBit y 0 qr))))) (add (mul (add (mul 2 V) 0) N) W) (add (mul V (mul 2 N)) W)
+             (fst ihr)
+             (cong Nat Nat (\v -> add v W) (mul (add (mul 2 V) 0) N) (mul V (mul 2 N))
+                (compPath Nat (mul (add (mul 2 V) 0) N) (mul (mul 2 V) N) (mul V (mul 2 N)) (cong Nat Nat (\v -> mul v N) (add (mul 2 V) 0) (mul 2 V) (add_zero_r (mul 2 V))) hVN)),
+           snd ihr))
+        (blt W T) (prefl Nat (blt W T)))
+def divLimb_inv : (y : WB) (qr : Sigma WB (\_ -> WB)) (w : Word) (V : Nat)
+    -> Path Nat (add (mul (wbval (fst qr)) (wbval y)) (wbval (snd qr))) V -> Lt (wbval (snd qr)) (wbval y)
+    -> Sigma (Path Nat (add (mul (wbval (fst (divLimb y qr w))) (wbval y)) (wbval (snd (divLimb y qr w)))) (add (mul V M64) (wlimb w)))
+             (\_ -> Lt (wbval (snd (divLimb y qr w))) (wbval y)) :=
+  \y qr w V hI hR -> divLimbGo_inv y 63 9223372036854775808 w qr V (prefl Nat 9223372036854775808) (snd w) hI hR
+-- the limbs from the head: Horner's rule on the dividend, the pair carrying the invariant
+def divGo_inv : (y x : WB) (qr : Sigma WB (\_ -> WB)) (V : Nat)
+    -> Path Nat (add (mul (wbval (fst qr)) (wbval y)) (wbval (snd qr))) V -> Lt (wbval (snd qr)) (wbval y)
+    -> Sigma (Path Nat (add (mul (wbval (fst (divGo y x qr))) (wbval y)) (wbval (snd (divGo y x qr)))) (add (mul V (wpow (wlen x))) (wbval x)))
+             (\_ -> Lt (wbval (snd (divGo y x qr))) (wbval y)) :=
+  \y -> elim List (\x -> (qr : Sigma WB (\_ -> WB)) (V : Nat)
+                    -> Path Nat (add (mul (wbval (fst qr)) (wbval y)) (wbval (snd qr))) V -> Lt (wbval (snd qr)) (wbval y)
+                    -> Sigma (Path Nat (add (mul (wbval (fst (divGo y x qr))) (wbval y)) (wbval (snd (divGo y x qr)))) (add (mul V (wpow (wlen x))) (wbval x)))
+                             (\_ -> Lt (wbval (snd (divGo y x qr))) (wbval y)))
+    (\qr V hI hR -> (compPath Nat (add (mul (wbval (fst qr)) (wbval y)) (wbval (snd qr))) V (add (mul V 1) 0) hI
+                       (sym Nat (add (mul V 1) 0) V (compPath Nat (add (mul V 1) 0) (mul V 1) V (add_zero_r (mul V 1)) (mul_one_r V))),
+                     hR))
+    (\l r ih -> \qr V hI hR ->
+      let Y : Nat := wbval y in
+      let L : Nat := wlimb l in
+      let K : Nat := wpow (wlen r) in
+      let R : Nat := wbval r in
+      let dl : Sigma (Path Nat (add (mul (wbval (fst (divLimb y qr l))) Y) (wbval (snd (divLimb y qr l)))) (add (mul V M64) L)) (\_ -> Lt (wbval (snd (divLimb y qr l))) Y) :=
+        divLimb_inv y qr l V hI hR in
+      let ihr : Sigma (Path Nat (add (mul (wbval (fst (divGo y r (divLimb y qr l)))) Y) (wbval (snd (divGo y r (divLimb y qr l))))) (add (mul (add (mul V M64) L) K) R))
+                      (\_ -> Lt (wbval (snd (divGo y r (divLimb y qr l)))) Y) :=
+        ih (divLimb y qr l) (add (mul V M64) L) (fst dl) (snd dl) in
+      (compPath Nat (add (mul (wbval (fst (divGo y r (divLimb y qr l)))) Y) (wbval (snd (divGo y r (divLimb y qr l))))) (add (mul (add (mul V M64) L) K) R) (add (mul V (wpow (suc (wlen r)))) (wbval (lcons l r)))
+         (fst ihr)
+         (compPath Nat (add (mul (add (mul V M64) L) K) R) (add (add (mul (mul V M64) K) (mul L K)) R) (add (mul V (wpow (suc (wlen r)))) (wbval (lcons l r)))
+            (cong Nat Nat (\v -> add v R) (mul (add (mul V M64) L) K) (add (mul (mul V M64) K) (mul L K)) (mul_dist_r (mul V M64) L K))
+            (compPath Nat (add (add (mul (mul V M64) K) (mul L K)) R) (add (mul (mul V M64) K) (add (mul L K) R)) (add (mul V (wpow (suc (wlen r)))) (wbval (lcons l r)))
+               (add_assoc (mul (mul V M64) K) (mul L K) R)
+               (compPath Nat (add (mul (mul V M64) K) (add (mul L K) R)) (add (mul V (wpow (suc (wlen r)))) (add (mul L K) R)) (add (mul V (wpow (suc (wlen r)))) (wbval (lcons l r)))
+                  (cong Nat Nat (\v -> add v (add (mul L K) R)) (mul (mul V M64) K) (mul V (wpow (suc (wlen r))))
+                     (compPath Nat (mul (mul V M64) K) (mul V (mul M64 K)) (mul V (wpow (suc (wlen r))))
+                        (mul_assoc V M64 K)
+                        (cong Nat Nat (mul V) (mul M64 K) (wpow (suc (wlen r))) (compPath Nat (mul M64 K) (mul K M64) (wpow (suc (wlen r))) (mul_comm M64 K) (sym Nat (wpow (suc (wlen r))) (mul K M64) (wpow_suc (wlen r)))))))
+                  (cong Nat Nat (add (mul V (wpow (suc (wlen r))))) (add (mul L K) R) (wbval (lcons l r)) (sym Nat (wbval (lcons l r)) (add (mul L K) R) (wbval_cons l r)))))),
+       snd ihr))
+-- the division's law: the quotient and remainder are the naturals' own. A zero divisor is the prelude's
+-- convention (div x 0 = 0, mod x 0 = x); otherwise the invariant at the end is what dm_unique reads.
+def bdivmod_wb_val : (x y : WB) -> Sigma (Path Nat (wbval (bdiv_wb x y)) (div (wbval x) (wbval y))) (\_ -> Path Nat (wbval (bmod_wb x y)) (mod (wbval x) (wbval y))) :=
+  \x y ->
+  let X : Nat := wbval x in
+  let Y : Nat := wbval y in
+  elim Nat (\m -> Path Nat (bisz y) m ->
+        Sigma (Path Nat (wbval (fst (elim Nat (\_ -> Sigma WB (\_ -> WB)) (divGo y x (lnil {Word}, lnil {Word})) (\_ _ -> (lnil {Word}, x)) m))) (div X Y))
+              (\_ -> Path Nat (wbval (snd (elim Nat (\_ -> Sigma WB (\_ -> WB)) (divGo y x (lnil {Word}, lnil {Word})) (\_ _ -> (lnil {Word}, x)) m))) (mod X Y)))
+    (\h0 ->
+      let hYs : Path Nat Y (suc (pred Y)) := isZero_suc_of_zero Y (compPath Nat (isZero Y) (bisz y) 0 (sym Nat (bisz y) (isZero Y) (bisz_val y)) h0) in
+      let m' : Nat := pred Y in
+      let hR0 : Lt 0 Y := substId (\v -> Lt 0 v) (pathToId (sym Nat Y (suc m') hYs)) refl in
+      let dg : Sigma (Path Nat (add (mul (wbval (fst (divGo y x (lnil {Word}, lnil {Word})))) Y) (wbval (snd (divGo y x (lnil {Word}, lnil {Word}))))) (add (mul 0 (wpow (wlen x))) X))
+                     (\_ -> Lt (wbval (snd (divGo y x (lnil {Word}, lnil {Word})))) Y) :=
+        divGo_inv y x (lnil {Word}, lnil {Word}) 0 (prefl Nat 0) hR0 in
+      let Q' : Nat := wbval (fst (divGo y x (lnil {Word}, lnil {Word}))) in
+      let R' : Nat := wbval (snd (divGo y x (lnil {Word}, lnil {Word}))) in
+      let eqX : Path Nat (add (mul Q' (suc m')) R') X := substId (\v -> Path Nat (add (mul Q' v) R') X) (pathToId hYs) (fst dg) in
+      let ltR : Lt R' (suc m') := substId (\v -> Lt R' v) (pathToId hYs) (snd dg) in
+      let dm : Sigma (Path Nat Q' (div X (suc m'))) (\_ -> Path Nat R' (mod X (suc m'))) := dm_unique m' Q' R' X eqX ltR in
+      (substId (\v -> Path Nat Q' (div X v)) (pathToId (sym Nat Y (suc m') hYs)) (fst dm),
+       substId (\v -> Path Nat R' (mod X v)) (pathToId (sym Nat Y (suc m') hYs)) (snd dm)))
+    (\k _ -> \hk ->
+      let hY0 : Path Nat Y 0 := isZero_zero_of_suc Y k (compPath Nat (isZero Y) (bisz y) (suc k) (sym Nat (bisz y) (isZero Y) (bisz_val y)) hk) in
+      (substId (\v -> Path Nat 0 (div X v)) (pathToId (sym Nat Y 0 hY0)) (prefl Nat 0),
+       substId (\v -> Path Nat X (mod X v)) (pathToId (sym Nat Y 0 hY0)) (prefl Nat X)))
+    (bisz y) (prefl Nat (bisz y))
