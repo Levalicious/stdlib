@@ -1,0 +1,10 @@
+#import word
+#import algebra
+-- the machine words are a commutative ring (the runtime primitives' specification, by the laws above)
+def wordAddMonoid : Monoid Word := (wadd, (0, (wadd_assoc, (wadd_zero_l, wadd_zero_r))))
+def wordAddCommMonoid : CommMonoid Word := (wordAddMonoid, wadd_comm)
+def wordAddGroup : Group Word := (wordAddMonoid, (wneg, wadd_neg_l))
+def wordAddAbGroup : AbGroup Word := (wordAddGroup, wadd_comm)
+def wordMulMonoid : Monoid Word := (wmul, (1, (wmul_assoc, (wmul_one_l, wmul_one_r))))
+def wordRing : Ring Word := (wordAddAbGroup, (wordMulMonoid, (wmul_dist_l, wmul_dist_r)))
+def wordCommRing : CommRing Word := (wordRing, wmul_comm)

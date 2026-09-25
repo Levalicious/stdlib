@@ -1,0 +1,53 @@
+#import prelude
+#import word
+-- wnat.tt: the word-backed naturals as a sub-theory of the naturals (M17).
+--
+-- wbval interprets a chain of words as the number it denotes, and the laws bundled below say it carries every
+-- runtime operation on chains onto the natural operation: the normalised addition, subtraction and
+-- multiplication, the power, the Euclidean division, the modular power, the modular inverse, the three
+-- comparisons, the zero test, and the embedding of a natural as its own chain. The bundle IS the licence for
+-- accelerating a Nat computation with chains - the erasure emits the chain operation's own body in place of the
+-- native, and this file says the answer read back through wbval is the natural one - stated once here rather
+-- than re-derived wherever it is used. Every operation here is what runs (the pivot to A): the folds of
+-- word.tt over the word primitives, whose value laws these are.
+--
+-- What it does not license is the recursor. A fold whose step has a chain law is a computation this
+-- sub-theory can carry whole; a fold whose step has none is walked at run time, one predecessor at a time.
+
+def WNat : U :=
+  Sigma ((x y : WB) -> Path Nat (wbval (nadd x y)) (add (wbval x) (wbval y))) (\_ ->
+  Sigma ((x y : WB) -> Path Nat (wbval (nsub x y)) (sub (wbval x) (wbval y))) (\_ ->
+  Sigma ((x y : WB) -> Path Nat (wbval (nmul x y)) (mul (wbval x) (wbval y))) (\_ ->
+  Sigma ((x e : WB) -> Path Nat (wbval (bpow_wb x e)) (pow (wbval x) (wbval e))) (\_ ->
+  Sigma ((x y : WB) -> Sigma (Path Nat (wbval (bdiv_wb x y)) (div (wbval x) (wbval y))) (\_ -> Path Nat (wbval (bmod_wb x y)) (mod (wbval x) (wbval y)))) (\_ ->
+  Sigma ((x e m : WB) (m' : Nat) -> Path Nat (suc m') (wbval m) -> Path Nat (wbval (bpowmod_wb x e m)) (mod (pow (wbval x) (wbval e)) (suc m'))) (\_ ->
+  Sigma ((x y : WB) -> Path Nat (wbval (bminv_wb x y)) (minv (wbval x) (wbval y))) (\_ ->
+  Sigma ((x y : WB) -> Path Nat (blt_wb x y) (blt (wbval x) (wbval y))) (\_ ->
+  Sigma ((x y : WB) -> Path Nat (ble_wb x y) (ble (wbval x) (wbval y))) (\_ ->
+  Sigma ((x y : WB) -> Path Nat (beq_wb x y) (beq (wbval x) (wbval y))) (\_ ->
+  Sigma ((x : WB) -> Path Nat (bisz x) (isZero (wbval x))) (\_ ->
+         (k : Nat) -> Path Nat (wbval (nelim k)) k)))))))))))
+def wnat : WNat :=
+  (nadd_val, (nsub_val, (nmul_val, (bpow_wb_val, (bdivmod_wb_val, (bpowmod_wb_val, (bminv_wb_val, (blt_wb_val, (ble_wb_val, (beq_wb_val, (bisz_val, wbval_nelim)))))))))))
+-- the components, named: a use of the sub-theory reads as one
+def wnat_add : (x y : WB) -> Path Nat (wbval (nadd x y)) (add (wbval x) (wbval y)) := fst wnat
+def wnat_sub : (x y : WB) -> Path Nat (wbval (nsub x y)) (sub (wbval x) (wbval y)) := fst (snd wnat)
+def wnat_mul : (x y : WB) -> Path Nat (wbval (nmul x y)) (mul (wbval x) (wbval y)) := fst (snd (snd wnat))
+def wnat_pow : (x e : WB) -> Path Nat (wbval (bpow_wb x e)) (pow (wbval x) (wbval e)) := fst (snd (snd (snd wnat)))
+def wnat_div : (x y : WB) -> Path Nat (wbval (bdiv_wb x y)) (div (wbval x) (wbval y)) := \x y -> fst (fst (snd (snd (snd (snd wnat)))) x y)
+def wnat_mod : (x y : WB) -> Path Nat (wbval (bmod_wb x y)) (mod (wbval x) (wbval y)) := \x y -> snd (fst (snd (snd (snd (snd wnat)))) x y)
+def wnat_powmod : (x e m : WB) (m' : Nat) -> Path Nat (suc m') (wbval m) -> Path Nat (wbval (bpowmod_wb x e m)) (mod (pow (wbval x) (wbval e)) (suc m')) := fst (snd (snd (snd (snd (snd wnat)))))
+def wnat_inv : (x y : WB) -> Path Nat (wbval (bminv_wb x y)) (minv (wbval x) (wbval y)) := fst (snd (snd (snd (snd (snd (snd wnat))))))
+def wnat_lt : (x y : WB) -> Path Nat (blt_wb x y) (blt (wbval x) (wbval y)) := fst (snd (snd (snd (snd (snd (snd (snd wnat)))))))
+def wnat_le : (x y : WB) -> Path Nat (ble_wb x y) (ble (wbval x) (wbval y)) := fst (snd (snd (snd (snd (snd (snd (snd (snd wnat))))))))
+def wnat_eq : (x y : WB) -> Path Nat (beq_wb x y) (beq (wbval x) (wbval y)) := fst (snd (snd (snd (snd (snd (snd (snd (snd (snd wnat)))))))))
+def wnat_isz : (x : WB) -> Path Nat (bisz x) (isZero (wbval x)) := fst (snd (snd (snd (snd (snd (snd (snd (snd (snd (snd wnat))))))))))
+def wnat_embed : (k : Nat) -> Path Nat (wbval (nelim k)) k := snd (snd (snd (snd (snd (snd (snd (snd (snd (snd (snd wnat))))))))))
+
+-- a use of it, in the shape the runtime has: a natural sum, computed in chains and read back through wbval
+def accel_add (x y : Nat) : Path Nat (wbval (nadd (nelim x) (nelim y))) (add x y) :=
+  compPath Nat (wbval (nadd (nelim x) (nelim y))) (add (wbval (nelim x)) (wbval (nelim y))) (add x y)
+    (wnat_add (nelim x) (nelim y))
+    (compPath Nat (add (wbval (nelim x)) (wbval (nelim y))) (add x (wbval (nelim y))) (add x y)
+       (cong Nat Nat (\u -> add u (wbval (nelim y))) (wbval (nelim x)) x (wnat_embed x))
+       (cong Nat Nat (\u -> add x u) (wbval (nelim y)) y (wnat_embed y)))

@@ -1,0 +1,282 @@
+-- eezott test prelude: the data types the tests share.
+data Bool : U where
+  | true : Bool
+  | false : Bool
+
+def not : Bool -> Bool := \b -> elim Bool (\_ -> Bool) false true b
+def and : Bool -> Bool -> Bool := \a b -> elim Bool (\_ -> Bool) b false a
+def or : Bool -> Bool -> Bool := \a b -> elim Bool (\_ -> Bool) true b a
+
+data Nat : U where
+  | zero : Nat
+  | suc : Nat -> Nat
+
+-- native definitions (M15): computed by the kernel on literals, by their bodies otherwise
+native add : Nat -> Nat -> Nat := \m n -> elim Nat (\_ -> Nat) n (\k ih -> suc ih) m
+native mul : Nat -> Nat -> Nat := \m n -> elim Nat (\_ -> Nat) zero (\k ih -> add n ih) m
+def one : Nat := suc zero
+def two : Nat := suc one
+def three : Nat := suc two
+
+data Id (A : U) (a : A) : A -> U where
+  | refl : Id A a a
+def substId {A : U} {a b : A} (P : A -> U) (p : Id A a b) (x : P a) : P b := elim Id (\y _ -> P y) x b p
+def symId {A : U} {a b : A} (p : Id A a b) : Id A b a := substId (\y -> Id A y a) p refl
+
+data Vec (A : U) : Nat -> U where
+  | nil : Vec A zero
+  | cons : (n : Nat) -> A -> Vec A n -> Vec A (suc n)
+
+data List (A : U) : U where
+  | lnil : List A
+  | lcons : A -> List A -> List A
+
+def id : (A : U) -> A -> A := \A x -> x
+
+-- cubical
+def prefl (A : U) (x : A) : Path A x x := \i -> x
+def sym (A : U) (x y : A) (p : Path A x y) : Path A y x := \i -> p (~ i)
+def cong (A B : U) (f : A -> B) (x y : A) (p : Path A x y) : Path B (f x) (f y) := \i -> f (p i)
+def funExt (A B : U) (f g : A -> B) (h : (x : A) -> Path B (f x) (g x)) : Path (A -> B) f g := \i -> \x -> h x i
+def compPath (A : U) (x y z : A) (p : Path A x y) (q : Path A y z) : Path A x z :=
+  \i -> hcomp A (~ i \/ i) (\j -> [ ~ i -> x | i -> q j ]) (p i)
+def transport (A B : U) (p : Path U A B) (a : A) : B := transp (\i -> p i) i0 a
+def hfill (A : U) (phi : I) (u : (i : I) -> Partial phi A) (u0 : Sub A phi (u i0)) (i : I) : A :=
+  hcomp A (phi \/ ~ i) (\j -> [ phi -> u (i /\ j) | ~ i -> outS u0 ]) (outS u0)
+
+-- equivalences and univalence
+def isContr (A : U) : U := Sigma A (\x -> (y : A) -> Path A x y)
+def fiber (A B : U) (f : A -> B) (y : B) : U := Sigma A (\x -> Path B (f x) y)
+def isEquiv (A B : U) (f : A -> B) : U := (y : B) -> isContr (fiber A B f y)
+def Equiv (A B : U) : U := Sigma (A -> B) (\f -> isEquiv A B f)
+def equivProof (T A : U) (w : Equiv T A) (a : A) (psi : I) (f : Partial psi (fiber T A (fst w) a)) : Sub (fiber T A (fst w) a) psi f :=
+  inS (hcomp (fiber T A (fst w) a) (psi \/ ~ psi) (\i -> [ psi -> snd (snd w a) f i | ~ psi -> fst (snd w a) ]) (fst (snd w a)))
+def idIsEquiv (A : U) : isEquiv A A (\x -> x) := \y -> ((y , \i -> y) , \q -> \i -> (snd q (~ i) , \j -> snd q (~ i \/ j)))
+def idEquiv (A : U) : Equiv A A := (\x -> x , idIsEquiv A)
+def ua (A B : U) (e : Equiv A B) : Path U A B := \i -> Glue B (~ i \/ i) [ ~ i -> (A , e) | i -> (B , idEquiv B) ]
+-- transport along a line of types is an equivalence (Cubical.Foundations.Equiv.Base, isEquivTransp with phi = i0)
+def transpIsEquiv (L : I -> U) : isEquiv (L i0) (L i1) (\x -> transp L i0 x) :=
+  transp (\k -> isEquiv (L i0) (L k) (\x -> transp (\j -> L (j /\ k)) (~ k) x)) i0 (idIsEquiv (L i0))
+def transpEquiv (L : I -> U) : Equiv (L i0) (L i1) := (\x -> transp L i0 x , transpIsEquiv L)
+
+-- any isomorphism is an equivalence (Cubical.Foundations.Isomorphism, lemIso)
+def lemIso (A B : U) (f : A -> B) (g : B -> A) (s : (b : B) -> Path B (f (g b)) b) (t : (a : A) -> Path A (g (f a)) a)
+           (y : B) (x0 x1 : A) (p0 : Path B (f x0) y) (p1 : Path B (f x1) y) : Path (fiber A B f y) (x0 , p0) (x1 , p1) :=
+  let fill0 : (i : I) -> (k : I) -> A := \i -> hfill A (i \/ ~ i) (\k -> [ i -> t x0 k | ~ i -> g y ]) (inS (g (p0 (~ i)))) in
+  let fill1 : (i : I) -> (k : I) -> A := \i -> hfill A (i \/ ~ i) (\k -> [ i -> t x1 k | ~ i -> g y ]) (inS (g (p1 (~ i)))) in
+  let fill2 : (i : I) -> (k : I) -> A := \i -> hfill A (i \/ ~ i) (\k -> [ i -> fill1 k i1 | ~ i -> fill0 k i1 ]) (inS (g y)) in
+  let p : Path A x0 x1 := \i -> fill2 i i1 in
+  let sq : (i : I) -> (j : I) -> A := \i j -> hcomp A (i \/ ~ i \/ j \/ ~ j)
+        (\k -> [ i -> fill1 j (~ k) | ~ i -> fill0 j (~ k) | j -> t (fill2 i i1) (~ k) | ~ j -> g y ]) (fill2 i j) in
+  let sq1 : (i : I) -> (j : I) -> B := \i j -> hcomp B (i \/ ~ i \/ j \/ ~ j)
+        (\k -> [ i -> s (p1 (~ j)) k | ~ i -> s (p0 (~ j)) k | j -> s (f (p i)) k | ~ j -> s y k ]) (f (sq i j)) in
+  \i -> (p i , \j -> sq1 i (~ j))
+def isoToIsEquiv (A B : U) (f : A -> B) (g : B -> A) (s : (b : B) -> Path B (f (g b)) b) (t : (a : A) -> Path A (g (f a)) a) : isEquiv A B f :=
+  \y -> ((g y , s y) , \z -> lemIso A B f g s t y (g y) (fst z) (s y) (snd z))
+def isoToEquiv (A B : U) (f : A -> B) (g : B -> A) (s : (b : B) -> Path B (f (g b)) b) (t : (a : A) -> Path A (g (f a)) a) : Equiv A B :=
+  (f , isoToIsEquiv A B f g s t)
+
+-- h-levels (Cubical.Foundations.Prelude / HLevels)
+data Empty : U where
+data Unit : U where
+  | tt : Unit
+def isProp (A : U) : U := (x y : A) -> Path A x y
+def isSet (A : U) : U := (x y : A) -> isProp (Path A x y)
+def isGroupoid (A : U) : U := (x y : A) -> isSet (Path A x y)
+def isContrIsProp {A : U} (h : isContr A) : isProp A := \x y -> compPath A x (fst h) y (sym A (fst h) x (snd h x)) (snd h y)
+-- a proposition is a set (isProp->isSet): the square is filled from the corner a
+def isPropIsSet {A : U} (h : isProp A) : isSet A := \a b p q -> \i j ->
+  hcomp A (i \/ ~ i \/ j \/ ~ j) (\k -> [ ~ i -> h a (p j) k | i -> h a (q j) k | ~ j -> h a a k | j -> h a b k ]) a
+def isPropUnit : isProp Unit := \x y -> elim Unit (\x -> Path Unit x y) (elim Unit (\y -> Path Unit tt y) (\_ -> tt) y) x
+def isPropEmpty : isProp Empty := \x y -> elim Empty (\x -> Path Empty x y) x
+def isPropNeg {A : U} : isProp (A -> Empty) := \f g -> \i -> \x -> elim Empty (\_ -> Path Empty (f x) (g x)) (f x) i
+def isPropPi {A : U} {B : A -> U} (h : (x : A) -> isProp (B x)) : isProp ((x : A) -> B x) := \f g -> \i -> \x -> h x (f x) (g x) i
+def isSetPi {A : U} {B : A -> U} (h : (x : A) -> isSet (B x)) : isSet ((x : A) -> B x) :=
+  \f g p q -> \i j -> \x -> h x (f x) (g x) (\k -> p k x) (\k -> q k x) i j
+-- decidable equality and Hedberg's theorem (Cubical.Relation.Nullary.Properties)
+data Dec (A : U) : U where
+  | yes : A -> Dec A
+  | no : (A -> Empty) -> Dec A
+def Discrete (A : U) : U := (x y : A) -> Dec (Path A x y)
+def Stable (A : U) : U := ((A -> Empty) -> Empty) -> A
+def DecStable {A : U} (d : Dec A) : Stable A := elim Dec (\_ -> Stable A) (\a _ -> a) (\na nna -> elim Empty (\_ -> A) (nna na)) d
+def stableEqIsSet {A : U} (st : (x y : A) -> Stable (Path A x y)) : isSet A := \a b p q -> \j i ->
+  let f : (x : A) -> Path A a x -> Path A a x := \x r -> st a x (\h -> h r) in
+  let fIsConst : (x : A) -> (r s : Path A a x) -> Path (Path A a x) (f x r) (f x s) := \x r s -> \k -> st a x (isPropNeg (\h -> h r) (\h -> h s) k) in
+  let rem : (r : Path A a b) -> PathP (\k -> Path A a (r k)) (f a (\_ -> a)) (f b r) := \r -> \k -> f (r k) (\l -> r (l /\ k)) in
+  hcomp A (i \/ ~ i \/ j \/ ~ j) (\k -> [ ~ i -> f a (\_ -> a) k | i -> fIsConst b p q j k | ~ j -> rem p i k | j -> rem q i k ]) a
+def discreteIsSet {A : U} (d : Discrete A) : isSet A := stableEqIsSet (\x y -> DecStable (d x y))
+-- the naturals are discrete, hence a set
+def pred : Nat -> Nat := \n -> elim Nat (\_ -> Nat) zero (\k _ -> k) n
+-- the rest of the native arithmetic (M15), after pred
+native sub : Nat -> Nat -> Nat := \m n -> elim Nat (\_ -> Nat) m (\k ih -> pred ih) n
+def isZero : Nat -> Nat := \n -> elim Nat (\_ -> Nat) 1 (\k ih -> 0) n
+-- ble by recursion on both arguments: ble 0 n = 1, ble (suc m) 0 = 0, ble (suc m) (suc n) = ble m n (order proofs are double inductions)
+native ble : Nat -> Nat -> Nat := \m -> elim Nat (\_ -> Nat -> Nat) (\n -> 1) (\k ih -> \n -> elim Nat (\_ -> Nat) 0 (\n' _ -> ih n') n) m
+native blt : Nat -> Nat -> Nat := \m n -> ble (suc m) n
+def and01 : Nat -> Nat -> Nat := \a b -> elim Nat (\_ -> Nat) 0 (\k ih -> b) a
+native beq : Nat -> Nat -> Nat := \m n -> and01 (ble m n) (ble n m)
+def if01 : Nat -> Nat -> Nat -> Nat := \c t e -> elim Nat (\_ -> Nat) e (\k ih -> t) c
+def ifN : {A : U} -> Nat -> A -> A -> A := \{A} c t e -> elim Nat (\_ -> A) e (\_ _ -> t) c
+-- division with remainder as one iteration of the state (q, r) (nat.tt proves x = q*m + r and r < m)
+native pow : Nat -> Nat -> Nat := \m n -> elim Nat (\_ -> Nat) 1 (\k ih -> mul m ih) n
+
+-- r < m, decided: the bound of the machine words (word.tt)
+def Lt : Nat -> Nat -> U := \r m -> Id Nat (blt r m) 1
+
+def injSuc {m n : Nat} (p : Path Nat (suc m) (suc n)) : Path Nat m n := \i -> pred (p i)
+def caseNat (a0 as : U) (n : Nat) : U := elim Nat (\_ -> U) a0 (\_ _ -> as) n
+def znots {n : Nat} (p : Path Nat zero (suc n)) : Empty := transp (\i -> caseNat Unit Empty (p i)) i0 tt
+def snotz {n : Nat} (p : Path Nat (suc n) zero) : Empty := znots (\i -> p (~ i))
+
+-- moved down from nat.tt: the slack iteration and the order lemmas it needs (the natives of div and mod
+-- are rewritten onto it in the next step, so the division facts can come with witness bounds)
+-- addition
+def add_zero_r : (n : Nat) -> Path Nat (add n zero) n :=
+  \n -> elim Nat (\n -> Path Nat (add n zero) n) (prefl Nat zero) (\k ih -> cong Nat Nat suc (add k zero) k ih) n
+def add_zero_l : (n : Nat) -> Path Nat (add zero n) n := \n -> prefl Nat n
+def add_suc_r : (m n : Nat) -> Path Nat (add m (suc n)) (suc (add m n)) :=
+  \m n -> elim Nat (\m -> Path Nat (add m (suc n)) (suc (add m n))) (prefl Nat (suc n))
+            (\k ih -> cong Nat Nat suc (add k (suc n)) (suc (add k n)) ih) m
+def add_comm : (m n : Nat) -> Path Nat (add m n) (add n m) :=
+  \m n -> elim Nat (\m -> Path Nat (add m n) (add n m)) (sym Nat (add n zero) n (add_zero_r n))
+            (\k ih -> compPath Nat (suc (add k n)) (suc (add n k)) (add n (suc k))
+                        (cong Nat Nat suc (add k n) (add n k) ih)
+                        (sym Nat (add n (suc k)) (suc (add n k)) (add_suc_r n k))) m
+def add_assoc : (a b c : Nat) -> Path Nat (add (add a b) c) (add a (add b c)) :=
+  \a b c -> elim Nat (\a -> Path Nat (add (add a b) c) (add a (add b c))) (prefl Nat (add b c))
+              (\k ih -> cong Nat Nat suc (add (add k b) c) (add k (add b c)) ih) a
+def add_swap : (a b c : Nat) -> Path Nat (add a (add b c)) (add b (add a c)) :=
+  \a b c -> compPath Nat (add a (add b c)) (add (add a b) c) (add b (add a c))
+              (sym Nat (add (add a b) c) (add a (add b c)) (add_assoc a b c))
+              (compPath Nat (add (add a b) c) (add (add b a) c) (add b (add a c))
+                 (cong Nat Nat (\x -> add x c) (add a b) (add b a) (add_comm a b))
+                 (add_assoc b a c))
+
+-- the order: a <= b is a witness d with a + d = b (the decidable ble is bridged below)
+def Le : Nat -> Nat -> U := \a b -> Sigma Nat (\d -> Path Nat (add a d) b)
+
+def add_zero_both : (a b : Nat) -> Path Nat (add a b) 0 -> Path Nat a 0 :=
+  \a b -> elim Nat (\a -> Path Nat (add a b) 0 -> Path Nat a 0) (\_ -> prefl Nat 0) (\k _ p -> elim Empty (\_ -> Path Nat (suc k) 0) (snotz p)) a
+
+-- ---- the division iteration with the slack carried (M16b b5) ----
+-- The step is decided by the SLACK's structure - zero wraps, a successor carries - never by a comparison. That matters
+-- because a blt against a machine-sized literal is a decision the checker would have to unroll (2^64 steps), while a
+-- split on a hypothesis's structure is free. The invariant carries the slack as its Le, so the step's own input is
+-- what decides it, and both branches come out constructive.
+def idToPath {A : U} {a b : A} (p : Id A a b) : Path A a b := substId (\y -> Path A a y) p (prefl A a)
+def pathToId {A : U} {a b : A} (p : Path A a b) : Id A a b := transp (\i -> Id A a (p i)) i0 refl
+
+def zeroNotOne .(e : Id Nat 0 1) : Empty := znots (idToPath e)
+def ble_ones : (a b k : Nat) -> .(e : Id Nat (ble a b) (suc k)) -> Id Nat (ble a b) 1 :=
+  \a -> elim Nat (\a -> (b k : Nat) -> .(e : Id Nat (ble a b) (suc k)) -> Id Nat (ble a b) 1)
+          (\b k _ -> refl)
+          (\a' ih b -> elim Nat (\b -> (k : Nat) -> .(e : Id Nat (ble (suc a') b) (suc k)) -> Id Nat (ble (suc a') b) 1)
+                         (\k e -> elim Empty (\_ -> Id Nat 0 1) (znots (idToPath e)))
+                         (\b' _ k e -> ih b' k e)
+                         b)
+          a
+
+def ble_le : (a b : Nat) -> .(e : Id Nat (ble a b) 1) -> Le a b :=
+  \a -> elim Nat (\a -> (b : Nat) -> .(e : Id Nat (ble a b) 1) -> Le a b)
+         (\b _ -> (b, prefl Nat b))
+         (\a' ih b -> elim Nat (\b -> .(e : Id Nat (ble (suc a') b) 1) -> Le (suc a') b)
+                        (\e -> elim Empty (\_ -> Le (suc a') 0) (zeroNotOne e))
+                        (\b' _ e -> (fst (ih b' e), cong Nat Nat suc (add a' (fst (ih b' e))) b' (snd (ih b' e))))
+                        b)
+         a
+
+-- the decision from a witness: the slack step derives it here, where the bound is suc m' (a variable, so the
+-- walk inside recurses on the term rather than unrolling a machine-sized literal)
+-- the decision from a witness, needed by the slack step (moved down from nat.tt)
+def le_ble : (a b : Nat) -> Le a b -> Id Nat (ble a b) 1 :=
+  \a -> elim Nat (\a -> (b : Nat) -> Le a b -> Id Nat (ble a b) 1)
+         (\b _ -> refl)
+         (\a' ih b -> elim Nat (\b -> Le (suc a') b -> Id Nat (ble (suc a') b) 1)
+                        (\p -> elim Empty (\_ -> Id Nat 0 1) (snotz (snd p)))
+                        (\b' _ p -> ih b' (fst p, injSuc (snd p)))
+                        b)
+         a
+def lt_le : (a b : Nat) -> .(h : Lt a b) -> Le (suc a) b := \a b h -> ble_le (suc a) b h
+def le_lt : (a b : Nat) -> Le (suc a) b -> Lt a b := \a b p -> le_ble (suc a) b p
+
+def SInv : (m x : Nat) -> Sigma Nat (\_ -> Nat) -> U :=
+  \m x p -> Sigma (Path Nat (add (mul (fst p) m) (snd p)) x)
+               (\_ -> Sigma (Le (suc (snd p)) m) (\_ -> Id Nat (blt (snd p) m) 1))
+def sstep : (m' : Nat) (p : Sigma Nat (\_ -> Nat)) -> Le (suc (snd p)) (suc m') -> Sigma Nat (\_ -> Nat) :=
+  \m' p h -> elim Nat (\d -> Path Nat (add (suc (snd p)) d) (suc m') -> Sigma Nat (\_ -> Nat))
+    (\_ -> (suc (fst p), 0))
+    (\d' _ _ -> (fst p, suc (snd p)))
+    (fst h) (snd h)
+def s_step_inv : (m' x : Nat) (p : Sigma Nat (\_ -> Nat)) (inv : SInv (suc m') x p)
+               -> SInv (suc m') (suc x) (sstep m' p (fst (snd inv))) :=
+  \m' x p inv -> elim Nat (\d -> (hp : Path Nat (add (suc (snd p)) d) (suc m')) -> SInv (suc m') (suc x) (sstep m' p (d, hp)))
+    (\hp -> ( compPath Nat (add (mul (suc (fst p)) (suc m')) 0) (add (suc m') (mul (fst p) (suc m'))) (suc x)
+                (add_zero_r (add (suc m') (mul (fst p) (suc m'))))
+                (compPath Nat (suc (add m' (mul (fst p) (suc m')))) (suc (add (mul (fst p) (suc m')) m')) (suc x)
+                   (cong Nat Nat suc (add m' (mul (fst p) (suc m'))) (add (mul (fst p) (suc m')) m') (add_comm m' (mul (fst p) (suc m'))))
+                   (cong Nat Nat suc (add (mul (fst p) (suc m')) m') x
+                      (compPath Nat (add (mul (fst p) (suc m')) m') (add (mul (fst p) (suc m')) (snd p)) x
+                         (cong Nat Nat (\y -> add (mul (fst p) (suc m')) y) m' (snd p)
+                            (compPath Nat m' (add (snd p) 0) (snd p)
+                               (sym Nat (add (snd p) 0) m' (injSuc hp))
+                               (add_zero_r (snd p))))
+                         (fst inv)))),
+              ((m', prefl Nat (suc m')), refl) ))
+    (\d' _ hp -> ( compPath Nat (add (mul (fst p) (suc m')) (suc (snd p))) (suc (add (mul (fst p) (suc m')) (snd p))) (suc x)
+                     (add_suc_r (mul (fst p) (suc m')) (snd p))
+                     (cong Nat Nat suc (add (mul (fst p) (suc m')) (snd p)) x (fst inv)),
+                   ((d', compPath Nat (add (suc (suc (snd p))) d') (suc (add (suc (snd p)) d')) (suc m')
+                          (prefl Nat (suc (add (suc (snd p)) d')))
+                          (compPath Nat (suc (add (suc (snd p)) d')) (add (suc (snd p)) (suc d')) (suc m')
+                             (sym Nat (add (suc (snd p)) (suc d')) (suc (add (suc (snd p)) d')) (add_suc_r (suc (snd p)) d'))
+                             hp)),
+                    le_lt (suc (snd p)) (suc m')
+                       (d', compPath Nat (add (suc (suc (snd p))) d') (suc (add (suc (snd p)) d')) (suc m')
+                          (prefl Nat (suc (add (suc (snd p)) d')))
+                          (compPath Nat (suc (add (suc (snd p)) d')) (add (suc (snd p)) (suc d')) (suc m')
+                             (sym Nat (add (suc (snd p)) (suc d')) (suc (add (suc (snd p)) d')) (add_suc_r (suc (snd p)) d'))
+                             hp))) ))
+    (fst (fst (snd inv))) (snd (fst (snd inv)))
+
+-- the iteration, bundled with its invariant so the fold's own step can use the slack it carries
+def siterI : (m' x : Nat) -> Sigma (Sigma Nat (\_ -> Nat)) (SInv (suc m') x) :=
+  \m' x -> elim Nat (\x -> Sigma (Sigma Nat (\_ -> Nat)) (SInv (suc m') x))
+    ((0, 0), (prefl Nat 0, ((m', prefl Nat (suc m')), refl)))
+    (\k ih -> ( sstep m' (fst ih) (fst (snd (snd ih))),
+                s_step_inv m' k (fst ih) (snd ih) ))
+    x
+def siter (m' x : Nat) : Sigma Nat (\_ -> Nat) := fst (siterI m' x)
+def siter_inv (m' x : Nat) : SInv (suc m') x (siter m' x) := snd (siterI m' x)
+-- the slack the iteration carries: the witness of its bound, and the divisor's own generator
+def siter_slack (m' x : Nat) : Nat := fst (fst (snd (siter_inv m' x)))
+def siter_le (m' x : Nat) : Le (suc (snd (siter m' x))) (suc m') := fst (snd (siter_inv m' x))
+-- the decision, carried by the invariant rather than recomputed: this is what modLtS returns, with no ble in sight
+def siter_lt (m' x : Nat) : Id Nat (blt (snd (siter m' x)) (suc m')) 1 := snd (snd (siter_inv m' x))
+
+-- the division iteration IS the slack fold: m = 0 is never reached through div and mod, which guard it, and the fold
+-- carries both the witness bound and the decision, so nothing below ever has to invert or unroll a comparison.
+def dmiter : Nat -> Nat -> Sigma Nat (\_ -> Nat) :=
+  \m x -> elim Nat (\_ -> Sigma Nat (\_ -> Nat)) (0, 0) (\m' _ -> siter m' x) m
+native div : Nat -> Nat -> Nat := \x m -> if01 (beq m 0) 0 (fst (dmiter m x))
+native mod : Nat -> Nat -> Nat := \x m -> if01 (beq m 0) x (snd (dmiter m x))
+-- Lev's rule: minv x y = x ^ (y - 2) mod y. The kernel computes the exponent's and the division's answer directly
+-- on the limbs; the body is the fallback, so the specification is definitional and the law below holds by prefl.
+native minv : Nat -> Nat -> Nat := \x y -> mod (pow x (sub y 2)) y
+def minv_spec : (x y : Nat) -> Path Nat (minv x y) (mod (pow x (sub y 2)) y) := \x y -> prefl Nat (mod (pow x (sub y 2)) y)
+def discreteNat : Discrete Nat := \m -> elim Nat (\m -> (n : Nat) -> Dec (Path Nat m n))
+  (\n -> elim Nat (\n -> Dec (Path Nat zero n)) (yes (\_ -> zero)) (\k _ -> no (\p -> znots p)) n)
+  (\m ihm -> \n -> elim Nat (\n -> Dec (Path Nat (suc m) n)) (no (\p -> snotz p))
+     (\k _ -> elim Dec (\_ -> Dec (Path Nat (suc m) (suc k))) (\p -> yes (\i -> suc (p i))) (\np -> no (\p -> np (injSuc p))) (ihm k)) n) m
+def isSetNat : isSet Nat := discreteIsSet discreteNat
+-- propositional truncation and set quotients, with their recursion principles into propositions and sets
+data PT (A : U) : U where
+  | tinc : A -> PT A
+  | squash1 : (x y : PT A) -> (i : I) -> PT A [ ~ i -> x | i -> y ]
+def PT_rec {A B : U} (Bprop : isProp B) (f : A -> B) : PT A -> B := \t -> elim PT (\_ -> B) (\a -> f a) (\x y ihx ihy -> \i -> Bprop ihx ihy i) t
+data SQ (A : U) (R : A -> A -> U) : U where
+  | inc : A -> SQ A R
+  | eq : (a b : A) -> R a b -> (i : I) -> SQ A R [ ~ i -> inc a | i -> inc b ]
+  | squash : (x y : SQ A R) -> (p q : Path (SQ A R) x y) -> (i j : I) -> SQ A R [ ~ i -> p j | i -> q j | ~ j -> x | j -> y ]
+def SQ_rec {A B : U} {R : A -> A -> U} (Bset : isSet B) (f : A -> B) (resp : (a b : A) -> R a b -> Path B (f a) (f b)) : SQ A R -> B :=
+  \s -> elim SQ (\_ -> B) (\a -> f a) (\a b r -> \i -> resp a b r i) (\x y p q ihx ihy ihp ihq -> \i j -> inS (Bset ihx ihy ihp ihq i j)) s
