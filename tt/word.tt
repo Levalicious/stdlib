@@ -1251,7 +1251,7 @@ def wbval_zap : (k : Nat) (x : WB) -> Path Nat (wbval (wzap k x)) (wbval x) :=
 def badd (x y : WB) : WB := snd (waddGo (wzap (suc (wlen y)) x) (wzap (suc (wlen x)) y))
 def bsub (x y : WB) : WB :=
   let r : Sigma Word (\_ -> WB) := wsubGo (wzap (suc (wlen y)) x) (wzap (suc (wlen x)) y) in
-  elim Nat (\_ -> WB) (snd r) (\_ _ -> lnil {Word}) (wlimb (fst r))
+  elim Bool (\_ -> WB) (lnil {Word}) (snd r) (wlt 0 (fst r))
 def wlen_zap : (k : Nat) (x : WB) -> Path Nat (wlen (wzap k x)) (add k (wlen x)) :=
   \k -> elim Nat (\k -> (x : WB) -> Path Nat (wlen (wzap k x)) (add k (wlen x)))
     (\x -> prefl Nat (wlen x))
@@ -1515,18 +1515,12 @@ def bsub_val : (x y : WB) -> Path Nat (wbval (bsub x y)) (sub (wbval x) (wbval y
      cong Nat Nat wpow (wlen z) N (compPath Nat (wlen z) (wlen x') N hz (wlen_badd_l x y)) in
   let sumlt : Lt (add (wbval x') (wbval y')) (wpow (wlen z)) :=
      substId (\v -> Lt (add (wbval x') (wbval y')) v) (pathToId (sym Nat (wpow (wlen z)) (wpow N) hK)) (badd_sum_lt x y) in
-  let goal : Path Nat (wbval (elim Nat (\_ -> WB) (snd r) (\_ _ -> lnil {Word}) (wlimb bo))) (sub (wbval x') (wbval y')) :=
-    elim Nat (\m -> Path Nat (wlimb bo) m -> Path Nat (wbval (elim Nat (\_ -> WB) (snd r) (\_ _ -> lnil {Word}) m)) (sub (wbval x') (wbval y')))
-      (\h0 -> let heq0 : Path Nat (add (wbval z) (wbval y')) (wbval x') :=
-       compPath Nat (add (wbval z) (wbval y')) (add (wbval x') 0) (wbval x')
-          (substId (\v -> Path Nat (add (wbval z) (wbval y')) (add (wbval x') (mul v (wpow (wlen z))))) (pathToId h0) e1)
-          (add_zero_r (wbval x')) in
-         sym Nat (sub (wbval x') (wbval y')) (wbval z)
-         (substId (\v -> Path Nat (sub v (wbval y')) (wbval z)) (pathToId heq0)
-            (compPath Nat (sub (add (wbval z) (wbval y')) (wbval y')) (sub (add (wbval y') (wbval z)) (wbval y')) (wbval z)
-               (cong Nat Nat (\v -> sub v (wbval y')) (add (wbval z) (wbval y')) (add (wbval y') (wbval z)) (add_comm (wbval z) (wbval y')))
-               (sub_add_d (wbval y') (wbval z)))))
-      (\k ih -> \hk ->
+  let goal : Path Nat (wbval (elim Bool (\_ -> WB) (lnil {Word}) (snd r) (wlt 0 bo))) (sub (wbval x') (wbval y')) :=
+    elim Bool (\c -> Path Bool (wlt 0 bo) c -> Path Nat (wbval (elim Bool (\_ -> WB) (lnil {Word}) (snd r) c)) (sub (wbval x') (wbval y')))
+      (\ht ->
+         let hl : Le 1 (wlimb bo) := lt_le 0 (wlimb bo) (wlt_true 0 bo ht) in
+         let k : Nat := fst hl in
+         let hk : Path Nat (wlimb bo) (suc k) := sym Nat (add 1 k) (wlimb bo) (snd hl) in
          let hk1 : Path Nat (add (wbval z) (wbval y')) (add (wbval x') (add (wpow (wlen z)) (mul k (wpow (wlen z))))) :=
             substId (\v -> Path Nat (add (wbval z) (wbval y')) (add (wbval x') (mul v (wpow (wlen z))))) (pathToId hk) e1 in
          let hlt : Le (suc (wbval z)) (add (wpow (wlen z)) (mul k (wpow (wlen z)))) :=
@@ -1535,7 +1529,16 @@ def bsub_val : (x y : WB) -> Path Nat (wbval (bsub x y)) (sub (wbval x) (wbval y
                ((mul k (wpow (wlen z))), prefl Nat (add (wpow (wlen z)) (mul k (wpow (wlen z))))) in
          let hle : Le (wbval x') (wbval y') := le_of_add_eq (wbval z) (wbval y') (wbval x') (add (wpow (wlen z)) (mul k (wpow (wlen z)))) hlt hk1 in
          sym Nat (sub (wbval x') (wbval y')) 0 (sub_eq_zero (wbval x') (wbval y') hle))
-      (wlimb bo) (prefl Nat (wlimb bo)) in
+      (\hf -> let h0 : Path Nat (wlimb bo) 0 := le_antisym (wlimb bo) 0 (wlt_false 0 bo hf) (wlimb bo, prefl Nat (wlimb bo)) in let heq0 : Path Nat (add (wbval z) (wbval y')) (wbval x') :=
+       compPath Nat (add (wbval z) (wbval y')) (add (wbval x') 0) (wbval x')
+          (substId (\v -> Path Nat (add (wbval z) (wbval y')) (add (wbval x') (mul v (wpow (wlen z))))) (pathToId h0) e1)
+          (add_zero_r (wbval x')) in
+         sym Nat (sub (wbval x') (wbval y')) (wbval z)
+         (substId (\v -> Path Nat (sub v (wbval y')) (wbval z)) (pathToId heq0)
+            (compPath Nat (sub (add (wbval z) (wbval y')) (wbval y')) (sub (add (wbval y') (wbval z)) (wbval y')) (wbval z)
+               (cong Nat Nat (\v -> sub v (wbval y')) (add (wbval z) (wbval y')) (add (wbval y') (wbval z)) (add_comm (wbval z) (wbval y')))
+               (sub_add_d (wbval y') (wbval z)))))
+      (wlt 0 bo) (prefl Bool (wlt 0 bo)) in
   compPath Nat (wbval (bsub x y)) (sub (wbval x') (wbval y')) (sub (wbval x) (wbval y))
     goal
     (compPath Nat (sub (wbval x') (wbval y')) (sub (wbval x) (wbval y')) (sub (wbval x) (wbval y))
