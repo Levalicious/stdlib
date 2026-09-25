@@ -1808,3 +1808,76 @@ def bdivmod_lt : (x y : WB) (m' : Nat) (hm : Path Nat (suc m') (wbval y))
 def bminv (x y : WB) : WB := nelim (minv (wbval x) (wbval y))
 def bminv_val : (x y : WB) -> Path Nat (wbval (bminv x y)) (minv (wbval x) (wbval y)) :=
   \x y -> wbval_nelim (minv (wbval x) (wbval y))
+
+-- ---- the runtime's chain (M17, the pivot to A): the normal form, the zero test, the padded comparisons ----
+-- With the theory's chain operations as the code that runs, each runtime operation returns a NORMAL chain, one
+-- with no leading zero limb: badd pads each operand by the other's length, so without a normal form a chain's
+-- length would grow with every operation instead of staying the length of its value. wnorm drops the leading
+-- zeros - the most significant end is the head - and its value is unchanged limb by limb (wbval_lcons_zero).
+def wbval_lcons_zero : (l : Word) (r : WB) -> Path Nat (wlimb l) 0 -> Path Nat (wbval (lcons l r)) (wbval r) :=
+  \l r h -> compPath Nat (wbval (lcons l r)) (add (mul (wlimb l) (wpow (wlen r))) (wbval r)) (wbval r)
+    (wbval_cons l r)
+    (cong Nat Nat (\v -> add (mul v (wpow (wlen r))) (wbval r)) (wlimb l) 0 h)
+def wnorm : WB -> WB := elim List (\_ -> WB) (lnil {Word}) (\l r ih -> elim Nat (\_ -> WB) ih (\_ _ -> lcons l r) (wlimb l))
+def wnorm_val : (x : WB) -> Path Nat (wbval (wnorm x)) (wbval x) :=
+  elim List (\x -> Path Nat (wbval (wnorm x)) (wbval x))
+    (prefl Nat 0)
+    (\l r ih -> elim Nat (\m -> Path Nat (wlimb l) m -> Path Nat (wbval (elim Nat (\_ -> WB) (wnorm r) (\_ _ -> lcons l r) m)) (wbval (lcons l r)))
+       (\h0 -> compPath Nat (wbval (wnorm r)) (wbval r) (wbval (lcons l r)) ih (sym Nat (wbval (lcons l r)) (wbval r) (wbval_lcons_zero l r h0)))
+       (\k _ -> \_ -> prefl Nat (wbval (lcons l r)))
+       (wlimb l) (prefl Nat (wlimb l)))
+-- the zero test, limb by limb: 1 when every limb is zero. Its value law reads the test as the naturals' own; the
+-- suc case rests on the top limb's weight being at least one (one_le_wpow), so the value is a successor.
+def bisz : WB -> Nat := elim List (\_ -> Nat) 1 (\l r ih -> and01 (isZero (wlimb l)) ih)
+def bisz_val : (x : WB) -> Path Nat (bisz x) (isZero (wbval x)) :=
+  elim List (\x -> Path Nat (bisz x) (isZero (wbval x)))
+    (prefl Nat 1)
+    (\l r ih -> elim Nat (\m -> Path Nat (wlimb l) m -> Path Nat (and01 (isZero m) (bisz r)) (isZero (wbval (lcons l r))))
+       (\h0 -> compPath Nat (bisz r) (isZero (wbval r)) (isZero (wbval (lcons l r))) ih
+                 (cong Nat Nat isZero (wbval r) (wbval (lcons l r)) (sym Nat (wbval (lcons l r)) (wbval r) (wbval_lcons_zero l r h0))))
+       (\k _ -> \hk ->
+          let P : Nat := wpow (wlen r) in
+          let d : Nat := fst (one_le_wpow (wlen r)) in
+          let hP : Path Nat (add 1 d) P := snd (one_le_wpow (wlen r)) in
+          sym Nat (isZero (wbval (lcons l r))) 0
+            (compPath Nat (isZero (wbval (lcons l r))) (isZero (add (mul (suc k) P) (wbval r))) 0
+               (cong Nat Nat isZero (wbval (lcons l r)) (add (mul (suc k) P) (wbval r))
+                  (compPath Nat (wbval (lcons l r)) (add (mul (wlimb l) P) (wbval r)) (add (mul (suc k) P) (wbval r))
+                     (wbval_cons l r)
+                     (cong Nat Nat (\v -> add (mul v P) (wbval r)) (wlimb l) (suc k) hk)))
+               (cong Nat Nat (\p -> isZero (add (add p (mul k p)) (wbval r))) P (add 1 d) (sym Nat (add 1 d) P hP))))
+       (wlimb l) (prefl Nat (wlimb l)))
+-- the padded comparisons: both operands brought to one length (wzap), then the comparison scan, whose law
+-- (wltGo_val) asks exactly that. ble and beq come from blt as the prelude derives them: m <= n is m < n + 1,
+-- and equality is the two inequalities.
+def blt_wb (x y : WB) : Nat := wltGoN (wzap (wlen y) x) (wzap (wlen x) y)
+def blt_wb_val : (x y : WB) -> Path Nat (blt_wb x y) (blt (wbval x) (wbval y)) :=
+  \x y ->
+  let x' : WB := wzap (wlen y) x in
+  let y' : WB := wzap (wlen x) y in
+  let hs : Path Nat (wlen x') (wlen y') :=
+    compPath Nat (wlen x') (add (wlen y) (wlen x)) (wlen y')
+      (wlen_zap (wlen y) x)
+      (compPath Nat (add (wlen y) (wlen x)) (add (wlen x) (wlen y)) (wlen y')
+         (add_comm (wlen y) (wlen x))
+         (sym Nat (wlen y') (add (wlen x) (wlen y)) (wlen_zap (wlen x) y))) in
+  compPath Nat (blt_wb x y) (blt (wbval x') (wbval y')) (blt (wbval x) (wbval y))
+    (wltGo_val x' y' hs)
+    (compPath Nat (blt (wbval x') (wbval y')) (blt (wbval x) (wbval y')) (blt (wbval x) (wbval y))
+       (cong Nat Nat (\v -> blt v (wbval y')) (wbval x') (wbval x) (wbval_zap (wlen y) x))
+       (cong Nat Nat (\v -> blt (wbval x) v) (wbval y') (wbval y) (wbval_zap (wlen x) y)))
+def ble_wb (x y : WB) : Nat := blt_wb x (badd y wone)
+def ble_wb_val : (x y : WB) -> Path Nat (ble_wb x y) (ble (wbval x) (wbval y)) :=
+  \x y -> compPath Nat (ble_wb x y) (blt (wbval x) (wbval (badd y wone))) (ble (wbval x) (wbval y))
+    (blt_wb_val x (badd y wone))
+    (compPath Nat (blt (wbval x) (wbval (badd y wone))) (blt (wbval x) (add (wbval y) 1)) (ble (wbval x) (wbval y))
+       (cong Nat Nat (\v -> blt (wbval x) v) (wbval (badd y wone)) (add (wbval y) 1)
+          (compPath Nat (wbval (badd y wone)) (add (wbval y) (wbval wone)) (add (wbval y) 1)
+             (badd_val y wone)
+             (cong Nat Nat (\v -> add (wbval y) v) (wbval wone) 1 wbval_wone)))
+       (cong Nat Nat (\v -> blt (wbval x) v) (add (wbval y) 1) (add 1 (wbval y)) (add_comm (wbval y) 1)))
+def beq_wb (x y : WB) : Nat := and01 (ble_wb x y) (ble_wb y x)
+def beq_wb_val : (x y : WB) -> Path Nat (beq_wb x y) (beq (wbval x) (wbval y)) :=
+  \x y -> compPath Nat (beq_wb x y) (and01 (ble (wbval x) (wbval y)) (ble_wb y x)) (beq (wbval x) (wbval y))
+    (cong Nat Nat (\v -> and01 v (ble_wb y x)) (ble_wb x y) (ble (wbval x) (wbval y)) (ble_wb_val x y))
+    (cong Nat Nat (\v -> and01 (ble (wbval x) (wbval y)) v) (ble_wb y x) (ble (wbval y) (wbval x)) (ble_wb_val y x))
