@@ -1,7 +1,7 @@
 #import prelude
 #import nat
 -- fold.tt: the folds over the Nat whose step is an addition, and what they compute (M17).
--- A fold that uses its induction hypothesis walks the literal, so the erasure refuses it; for the steps
+-- A fold that uses its induction hypothesis walks its value at run time; for the steps
 -- below the walk has a closed form, and these are the theorems that license the erasure to emit it.
 
 -- one more: a fold whose step adds w to the running value, n times, is z + n * w
@@ -13,4 +13,18 @@ def elim_add : (z w n : Nat) -> Path Nat (elim Nat (\_ -> Nat) z (\k ih -> add i
        (compPath Nat (add (add z (mul k w)) w) (add z (add (mul k w) w)) (add z (add w (mul k w)))
           (add_assoc z (mul k w) w)
           (cong Nat Nat (\x -> add z x) (add (mul k w) w) (add w (mul k w)) (add_comm (mul k w) w))))
+    n
+-- and with the addition on the other side: a step that adds the running value to w, n times from z, is z + n * w too
+def elim_add_l : (z w n : Nat) -> Path Nat (elim Nat (\_ -> Nat) z (\k ih -> add w ih) n) (add z (mul n w)) :=
+  \z w n -> elim Nat (\n -> Path Nat (elim Nat (\_ -> Nat) z (\k ih -> add w ih) n) (add z (mul n w)))
+    (sym Nat (add z zero) z (add_zero_r z))
+    (\k ih ->
+      let X : Nat := mul k w in
+      compPath Nat (add w (elim Nat (\_ -> Nat) z (\k ih -> add w ih) k)) (add w (add z X)) (add z (add w X))
+        (cong Nat Nat (\x -> add w x) (elim Nat (\_ -> Nat) z (\k ih -> add w ih) k) (add z X) ih)
+        (compPath Nat (add w (add z X)) (add (add w z) X) (add z (add w X))
+           (sym Nat (add (add w z) X) (add w (add z X)) (add_assoc w z X))
+           (compPath Nat (add (add w z) X) (add (add z w) X) (add z (add w X))
+              (cong Nat Nat (\y -> add y X) (add w z) (add z w) (add_comm w z))
+              (add_assoc z w X))))
     n
