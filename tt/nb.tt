@@ -2,8 +2,7 @@
 #import nat
 #import word
 #import wnat
-#represent nbNat
--- nb.tt: the run-time Nat (M18, stage i). A natural at run time is NB: the list of its machine words with the
+-- nb.tt: the low-first chain NB (M18): the list of a natural's machine words with the
 -- LOW word first (word.tt's WB is high word first), normalised - no trailing zero word, so zero is the empty
 -- list. The low word at the head is what makes the successor and the predecessor one word operation each,
 -- carrying or borrowing rarely: the Nat's own interface (zero, suc, the case analysis) is answered a word at
@@ -403,31 +402,3 @@ def wlowL_val : (x : NB) -> Path Nat (wlimb (wlowL x)) (mod (wbvalL x) M64) :=
     (\l r _ -> sym Nat (mod (add (wlimb l) (mul (wbvalL r) M64)) M64) (wlimb l)
        (compPath Nat (mod (add (wlimb l) (mul (wbvalL r) M64)) M64) (mod (wlimb l) M64) (wlimb l)
           (mod_add_mul (wlimb l) (wbvalL r) M63) (mod_small M63 (wlimb l) (snd l))))
-
--- ---- the bundle: the representation of the Nat the erasure runs, with its licence ----
--- The single erasure reads this by position: the type, zero, the successor, the empty test, the predecessor, the value,
--- the normal-form test, the word boundary, then the natives in the kernel's order (add sub mul div mod pow eq lt le minv),
--- and then the laws that license each of them. A program never names it: `represent Nat nbNat` in this file does.
-def NatRepr : U 1 :=
-  Sigma (U) (\rR -> Sigma (rR) (\rzero -> Sigma (rR -> rR) (\rsucc -> Sigma (rR -> Bool) (\risz -> Sigma (rR -> rR) (\rpred -> Sigma (rR -> Nat) (\rtoNat -> Sigma (rR -> Bool) (\rnorm -> Sigma (Word -> rR) (\rsingle -> Sigma (rR -> Word) (\rlow -> Sigma (rR -> rR -> rR) (\radd -> Sigma (rR -> rR -> rR) (\rsub -> Sigma (rR -> rR -> rR) (\rmul -> Sigma (rR -> rR -> rR) (\rdiv -> Sigma (rR -> rR -> rR) (\rmod -> Sigma (rR -> rR -> rR) (\rpow -> Sigma (rR -> rR -> Nat) (\req -> Sigma (rR -> rR -> Nat) (\rlt -> Sigma (rR -> rR -> Nat) (\rle -> Sigma (rR -> rR -> rR) (\rminv -> Sigma (Path Bool (rnorm rzero) true) (\lzero_norm -> Sigma (Path Nat (rtoNat rzero) 0) (\lzero_val -> Sigma ((x : rR) -> Path Nat (rtoNat (rsucc x)) (suc (rtoNat x))) (\lsucc_val -> Sigma ((x : rR) -> Path Bool (rnorm x) true -> Path Bool (rnorm (rsucc x)) true) (\lsucc_norm -> Sigma ((x : rR) -> Path Bool (rnorm x) true -> Path Nat (rtoNat (rpred x)) (pred (rtoNat x))) (\lpred_val -> Sigma ((x : rR) -> Path Bool (rnorm x) true -> Path Bool (rnorm (rpred x)) true) (\lpred_norm -> Sigma ((x : rR) -> Path Bool (risz x) true -> Path Nat (rtoNat x) 0) (\lisz_true -> Sigma ((x : rR) -> Path Bool (rnorm x) true -> Path Bool (risz x) false -> Le 1 (rtoNat x)) (\lisz_false -> Sigma ((w : Word) -> Path Nat (rtoNat (rsingle w)) (wlimb w)) (\lsingle_val -> Sigma ((w : Word) -> Path Bool (rnorm (rsingle w)) true) (\lsingle_norm -> Sigma ((x : rR) -> Path Nat (wlimb (rlow x)) (mod (rtoNat x) M64)) (\llow_val -> Sigma ((x y : rR) -> Path Nat (rtoNat (radd x y)) (add (rtoNat x) (rtoNat y))) (\ladd_val -> Sigma ((x y : rR) -> Path Bool (rnorm (radd x y)) true) (\ladd_norm -> Sigma ((x y : rR) -> Path Nat (rtoNat (rsub x y)) (sub (rtoNat x) (rtoNat y))) (\lsub_val -> Sigma ((x y : rR) -> Path Bool (rnorm (rsub x y)) true) (\lsub_norm -> Sigma ((x y : rR) -> Path Nat (rtoNat (rmul x y)) (mul (rtoNat x) (rtoNat y))) (\lmul_val -> Sigma ((x y : rR) -> Path Bool (rnorm (rmul x y)) true) (\lmul_norm -> Sigma ((x y : rR) -> Path Nat (rtoNat (rdiv x y)) (div (rtoNat x) (rtoNat y))) (\ldiv_val -> Sigma ((x y : rR) -> Path Bool (rnorm (rdiv x y)) true) (\ldiv_norm -> Sigma ((x y : rR) -> Path Nat (rtoNat (rmod x y)) (mod (rtoNat x) (rtoNat y))) (\lmod_val -> Sigma ((x y : rR) -> Path Bool (rnorm (rmod x y)) true) (\lmod_norm -> Sigma ((x y : rR) -> Path Nat (rtoNat (rpow x y)) (pow (rtoNat x) (rtoNat y))) (\lpow_val -> Sigma ((x y : rR) -> Path Bool (rnorm (rpow x y)) true) (\lpow_norm -> Sigma ((x y : rR) -> Path Nat (req x y) (beq (rtoNat x) (rtoNat y))) (\leq_val -> Sigma ((x y : rR) -> Path Nat (rlt x y) (blt (rtoNat x) (rtoNat y))) (\llt_val -> Sigma ((x y : rR) -> Path Nat (rle x y) (ble (rtoNat x) (rtoNat y))) (\lle_val -> Sigma ((x y : rR) -> Path Nat (rtoNat (rminv x y)) (minv (rtoNat x) (rtoNat y))) (\lminv_val -> (x y : rR) -> Path Bool (rnorm (rminv x y)) true))))))))))))))))))))))))))))))))))))))))))))))
-def nbNat : NatRepr :=
-  (NB, (nzero, (nsucc, (nisz, (npred, (wbvalL, (isNormL, (wsingleL, (wlowL, (naddN, (nsubN, (nmulN, (ndivN, (nmodN, (npowN, (neqN, (nltN, (nleN, (nminvN, (prefl Bool true, (prefl Nat 0, (nsucc_val, (nsucc_norm, (npred_val, (npred_norm, (nisz_true_zero, (normL_pos, (wsingleL_val, (wsingleL_norm, (wlowL_val, (naddN_val, (naddN_norm, (nsubN_val, (nsubN_norm, (nmulN_val, (nmulN_norm, (ndivN_val, (ndivN_norm, (nmodN_val, (nmodN_norm, (npowN_val, (npowN_norm, (neqN_val, (nltN_val, (nleN_val, (nminvN_val, nminvN_norm))))))))))))))))))))))))))))))))))))))))))))))
-def nbNat_R : U := fst (nbNat)
-def nbNat_zero : NB := fst (snd (nbNat))
-def nbNat_succ : NB -> NB := fst (snd (snd (nbNat)))
-def nbNat_isz : NB -> Bool := fst (snd (snd (snd (nbNat))))
-def nbNat_pred : NB -> NB := fst (snd (snd (snd (snd (nbNat)))))
-def nbNat_toNat : NB -> Nat := fst (snd (snd (snd (snd (snd (nbNat))))))
-def nbNat_norm : NB -> Bool := fst (snd (snd (snd (snd (snd (snd (nbNat)))))))
-def nbNat_single : Word -> NB := fst (snd (snd (snd (snd (snd (snd (snd (nbNat))))))))
-def nbNat_low : NB -> Word := fst (snd (snd (snd (snd (snd (snd (snd (snd (nbNat)))))))))
-def nbNat_add : NB -> NB -> NB := fst (snd (snd (snd (snd (snd (snd (snd (snd (snd (nbNat))))))))))
-def nbNat_sub : NB -> NB -> NB := fst (snd (snd (snd (snd (snd (snd (snd (snd (snd (snd (nbNat)))))))))))
-def nbNat_mul : NB -> NB -> NB := fst (snd (snd (snd (snd (snd (snd (snd (snd (snd (snd (snd (nbNat))))))))))))
-def nbNat_div : NB -> NB -> NB := fst (snd (snd (snd (snd (snd (snd (snd (snd (snd (snd (snd (snd (nbNat)))))))))))))
-def nbNat_mod : NB -> NB -> NB := fst (snd (snd (snd (snd (snd (snd (snd (snd (snd (snd (snd (snd (snd (nbNat))))))))))))))
-def nbNat_pow : NB -> NB -> NB := fst (snd (snd (snd (snd (snd (snd (snd (snd (snd (snd (snd (snd (snd (snd (nbNat)))))))))))))))
-def nbNat_eq : NB -> NB -> Nat := fst (snd (snd (snd (snd (snd (snd (snd (snd (snd (snd (snd (snd (snd (snd (snd (nbNat))))))))))))))))
-def nbNat_lt : NB -> NB -> Nat := fst (snd (snd (snd (snd (snd (snd (snd (snd (snd (snd (snd (snd (snd (snd (snd (snd (nbNat)))))))))))))))))
-def nbNat_le : NB -> NB -> Nat := fst (snd (snd (snd (snd (snd (snd (snd (snd (snd (snd (snd (snd (snd (snd (snd (snd (snd (nbNat))))))))))))))))))
-def nbNat_minv : NB -> NB -> NB := fst (snd (snd (snd (snd (snd (snd (snd (snd (snd (snd (snd (snd (snd (snd (snd (snd (snd (snd (nbNat)))))))))))))))))))
