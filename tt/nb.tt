@@ -1,0 +1,432 @@
+#import prelude
+#import nat
+#import word
+#import wnat
+-- nb.tt: the run-time Nat (M18, stage i). A natural at run time is NB: the list of its machine words with the
+-- LOW word first (word.tt's WB is high word first), normalised - no trailing zero word, so zero is the empty
+-- list. The low word at the head is what makes the successor and the predecessor one word operation each,
+-- carrying or borrowing rarely: the Nat's own interface (zero, suc, the case analysis) is answered a word at
+-- a time, and a walk costs one word operation per step. The arithmetic folds of word.tt run on NB through
+-- reversal for now (a constant factor); their laws transfer through wbvalL = wbval . rev.
+def NB : U := List Word
+
+-- ---- reversal, and the value read from the low end ----
+def wsnoc (x : WB) (l : Word) : WB := elim List (\_ -> WB) (lcons l (lnil {Word})) (\a _ ih -> lcons a ih) x
+def rev : WB -> WB := elim List (\_ -> WB) (lnil {Word}) (\a _ ih -> wsnoc ih a)
+def wbvalL : NB -> Nat := elim List (\_ -> Nat) 0 (\l _ ih -> add (wlimb l) (mul ih M64))   -- the literal on the right: mul recurses on its left argument
+def wlen_snoc : (x : WB) (l : Word) -> Path Nat (wlen (wsnoc x l)) (suc (wlen x)) :=
+  \x l -> elim List (\x -> Path Nat (wlen (wsnoc x l)) (suc (wlen x))) (prefl Nat 1)
+    (\a r ih -> cong Nat Nat suc (wlen (wsnoc r l)) (suc (wlen r)) ih) x
+-- the value of x with l appended below it: x shifted up a word, plus l (wbval_app0 with a limb)
+def wbval_snoc : (x : WB) (l : Word) -> Path Nat (wbval (wsnoc x l)) (add (mul (wbval x) M64) (wlimb l)) :=
+  \x l -> elim List (\x -> Path Nat (wbval (wsnoc x l)) (add (mul (wbval x) M64) (wlimb l))) (prefl Nat (wlimb l))
+    (\a r ih ->
+      let A : Nat := wlimb a in
+      let L : Nat := wlimb l in
+      let P : Nat := wpow (wlen r) in
+      let R : Nat := wbval r in
+      let m1 : Nat := add (mul A (wpow (wlen (wsnoc r l)))) (wbval (wsnoc r l)) in
+      let m2 : Nat := add (mul A (wpow (suc (wlen r)))) (wbval (wsnoc r l)) in
+      let m3 : Nat := add (mul A (wpow (suc (wlen r)))) (add (mul R M64) L) in
+      let m4 : Nat := add (mul A (mul P M64)) (add (mul R M64) L) in
+      let m5 : Nat := add (mul (mul A P) M64) (add (mul R M64) L) in
+      let m6 : Nat := add (add (mul (mul A P) M64) (mul R M64)) L in
+      let m7 : Nat := add (mul (add (mul A P) R) M64) L in
+      let s1 : Path Nat (wbval (wsnoc (lcons a r) l)) m1 := wbval_cons a (wsnoc r l) in
+      let s2 : Path Nat m1 m2 := cong Nat Nat (\w -> add (mul A (wpow w)) (wbval (wsnoc r l))) (wlen (wsnoc r l)) (suc (wlen r)) (wlen_snoc r l) in
+      let s3 : Path Nat m2 m3 := cong Nat Nat (\w -> add (mul A (wpow (suc (wlen r)))) w) (wbval (wsnoc r l)) (add (mul R M64) L) ih in
+      let s4 : Path Nat m3 m4 := cong Nat Nat (\w -> add (mul A w) (add (mul R M64) L)) (wpow (suc (wlen r))) (mul P M64) (wpow_suc (wlen r)) in
+      let s5 : Path Nat m4 m5 := cong Nat Nat (\w -> add w (add (mul R M64) L)) (mul A (mul P M64)) (mul (mul A P) M64) (sym Nat (mul (mul A P) M64) (mul A (mul P M64)) (mul_assoc A P M64)) in
+      let s6 : Path Nat m5 m6 := sym Nat m6 m5 (add_assoc (mul (mul A P) M64) (mul R M64) L) in
+      let s7 : Path Nat m6 m7 := cong Nat Nat (\w -> add w L) (add (mul (mul A P) M64) (mul R M64)) (mul (add (mul A P) R) M64) (sym Nat (mul (add (mul A P) R) M64) (add (mul (mul A P) M64) (mul R M64)) (mul_dist_r (mul A P) R M64)) in
+      let s8 : Path Nat m7 (add (mul (wbval (lcons a r)) M64) L) := cong Nat Nat (\w -> add (mul w M64) L) (add (mul A P) R) (wbval (lcons a r)) (sym Nat (wbval (lcons a r)) (add (mul A P) R) (wbval_cons a r)) in
+      compPath Nat (wbval (wsnoc (lcons a r) l)) m1 (add (mul (wbval (lcons a r)) M64) L) s1
+        (compPath Nat m1 m2 (add (mul (wbval (lcons a r)) M64) L) s2
+          (compPath Nat m2 m3 (add (mul (wbval (lcons a r)) M64) L) s3
+            (compPath Nat m3 m4 (add (mul (wbval (lcons a r)) M64) L) s4
+              (compPath Nat m4 m5 (add (mul (wbval (lcons a r)) M64) L) s5
+                (compPath Nat m5 m6 (add (mul (wbval (lcons a r)) M64) L) s6
+                  (compPath Nat m6 m7 (add (mul (wbval (lcons a r)) M64) L) s7 s8)))))))
+    x
+def rev_snoc : (x : WB) (l : Word) -> Path WB (rev (wsnoc x l)) (lcons l (rev x)) :=
+  \x l -> elim List (\x -> Path WB (rev (wsnoc x l)) (lcons l (rev x))) (prefl WB (lcons l (lnil {Word})))
+    (\a r ih -> cong WB WB (\z -> wsnoc z a) (rev (wsnoc r l)) (lcons l (rev r)) ih) x
+def rev_rev : (x : WB) -> Path WB (rev (rev x)) x :=
+  elim List (\x -> Path WB (rev (rev x)) x) (prefl WB (lnil {Word}))
+    (\a r ih -> compPath WB (rev (rev (lcons a r))) (lcons a (rev (rev r))) (lcons a r)
+       (rev_snoc (rev r) a) (cong WB WB (\z -> lcons a z) (rev (rev r)) r ih))
+-- the low-first value is the high-first value of the reversal, and back
+def wbvalL_rev : (x : NB) -> Path Nat (wbvalL x) (wbval (rev x)) :=
+  elim List (\x -> Path Nat (wbvalL x) (wbval (rev x))) (prefl Nat 0)
+    (\l r ih ->
+      let L : Nat := wlimb l in
+      let V : Nat := wbvalL r in
+      compPath Nat (add L (mul V M64)) (add (mul V M64) L) (wbval (wsnoc (rev r) l))
+        (add_comm L (mul V M64))
+        (sym Nat (wbval (wsnoc (rev r) l)) (add (mul V M64) L)
+           (compPath Nat (wbval (wsnoc (rev r) l)) (add (mul (wbval (rev r)) M64) L) (add (mul V M64) L)
+              (wbval_snoc (rev r) l)
+              (cong Nat Nat (\w -> add (mul w M64) L) (wbval (rev r)) V (sym Nat V (wbval (rev r)) ih)))))
+def wbval_revL : (x : WB) -> Path Nat (wbval x) (wbvalL (rev x)) :=
+  \x -> compPath Nat (wbval x) (wbval (rev (rev x))) (wbvalL (rev x))
+          (cong WB Nat wbval x (rev (rev x)) (sym WB (rev (rev x)) x (rev_rev x)))
+          (sym Nat (wbvalL (rev x)) (wbval (rev (rev x))) (wbvalL_rev (rev x)))
+
+-- ---- the Nat's interface on NB: zero, the successor, the case analysis ----
+-- Each is one word operation at the low end, carrying or borrowing into the next word only when it must, so a
+-- unary walk costs one word operation per step. Normalised: no trailing zero word (zero is the empty list), so
+-- the empty test decides zero and a value has one form. The decisions are the word primitives' (wlt, weq).
+def nzero : NB := lnil {Word}
+def nisz : NB -> Bool := elim List (\_ -> Bool) true (\_ _ _ -> false)
+def isNormL : NB -> Bool := elim List (\_ -> Bool) true (\l r ih -> elim Bool (\_ -> Bool) (wlt 0 l) ih (nisz r))
+def wM63 : Word := 18446744073709551615
+def nsucc : NB -> NB := elim List (\_ -> NB) (lcons 1 (lnil {Word}))
+  (\l r ih -> elim Bool (\_ -> NB) (lcons 0 ih) (lcons (wadd l 1) r) (weq l wM63))
+def npred : NB -> NB := elim List (\_ -> NB) (lnil {Word})
+  (\l r ih -> elim Bool (\_ -> NB)
+     (lcons (wsub l 1) r)
+     (elim Bool (\_ -> NB)
+        (elim Bool (\_ -> NB) (lnil {Word}) (lcons 0 r) (nisz r))
+        (elim Bool (\_ -> NB) (lnil {Word}) (lcons wM63 ih) (nisz r))
+        (wlt 0 l))
+     (wlt 1 l))
+
+-- ---- bridges: the word equality read as the order on values ----
+def and01_suc_r : (x y k : Nat) -> Path Nat (and01 x y) (suc k) -> Path Nat y (suc k) :=
+  \x y k -> elim Nat (\x -> Path Nat (and01 x y) (suc k) -> Path Nat y (suc k))
+    (\h -> elim Empty (\_ -> Path Nat y (suc k)) (znots h))
+    (\_ _ -> \h -> h) x
+def and01_suc_l : (x y k : Nat) -> Path Nat (and01 x y) (suc k) -> Sigma Nat (\j -> Path Nat x (suc j)) :=
+  \x y k -> elim Nat (\x -> Path Nat (and01 x y) (suc k) -> Sigma Nat (\j -> Path Nat x (suc j)))
+    (\h -> elim Empty (\_ -> Sigma Nat (\j -> Path Nat 0 (suc j))) (znots h))
+    (\j _ -> \_ -> (j, prefl Nat (suc j))) x
+def weq_true : (a b : Word) -> Path Bool (weq a b) true -> Path Nat (wlimb a) (wlimb b) :=
+  \a b h ->
+  let A : Nat := wlimb a in
+  let B : Nat := wlimb b in
+  let s : Sigma Nat (\k -> Path Nat (beq A B) (suc k)) := n2b_true_suc (beq A B) h in
+  let l : Sigma Nat (\j -> Path Nat (ble A B) (suc j)) := and01_suc_l (ble A B) (ble B A) (fst s) (snd s) in
+  let r : Path Nat (ble B A) (suc (fst s)) := and01_suc_r (ble A B) (ble B A) (fst s) (snd s) in
+  le_antisym A B (ble_le A B (ble_ones A B (fst l) (pathToId (snd l)))) (ble_le B A (ble_ones B A (fst s) (pathToId r)))
+def weq_false : (a b : Word) -> Path Bool (weq a b) false -> Path Nat (wlimb a) (wlimb b) -> Empty :=
+  \a b h p ->
+  let A : Nat := wlimb a in
+  let B : Nat := wlimb b in
+  let h0 : Path Nat (and01 (ble A B) (ble B A)) 0 := n2b_false_zero (beq A B) h in
+  let e1 : Id Nat (ble A B) 1 := le_ble A B (0, compPath Nat (add A 0) A B (add_zero_r A) p) in
+  let e2 : Id Nat (ble B A) 1 := le_ble B A (0, compPath Nat (add B 0) B A (add_zero_r B) (sym Nat A B p)) in
+  snotz {0} (compPath Nat 1 (and01 (ble A B) (ble B A)) 0
+           (substId (\v -> Path Nat 1 (and01 v (ble B A))) (symId e1)
+              (substId (\v -> Path Nat 1 (and01 1 v)) (symId e2) (prefl Nat 1)))
+           h0)
+def le_neq_lt : (a b : Nat) -> Le a b -> (Path Nat a b -> Empty) -> Lt a b :=
+  \a b hle hne -> elim Nat (\d -> Path Nat (add a d) b -> Lt a b)
+    (\e -> elim Empty (\_ -> Lt a b) (hne (compPath Nat a (add a 0) b (sym Nat (add a 0) a (add_zero_r a)) e)))
+    (\d _ -> \e -> le_ble (suc a) b (d, compPath Nat (add (suc a) d) (add a (suc d)) b (sym Nat (add a (suc d)) (suc (add a d)) (add_suc_r a d)) e))
+    (fst hle) (snd hle)
+def wlimb_le_M63 : (w : Word) -> Le (wlimb w) M63 :=
+  \w -> (fst (wlimb_le w), injSuc {add (wlimb w) (fst (wlimb_le w))} {M63} (snd (wlimb_le w)))
+
+-- ---- the interface's laws ----
+def nisz_true_zero : (x : NB) -> Path Bool (nisz x) true -> Path Nat (wbvalL x) 0 :=
+  elim List (\x -> Path Bool (nisz x) true -> Path Nat (wbvalL x) 0)
+    (\_ -> prefl Nat 0)
+    (\l r _ -> \h -> elim Empty (\_ -> Path Nat (wbvalL (lcons l r)) 0) (falseNotTrue h))
+def normL_tail : (l : Word) (r : NB) -> Path Bool (isNormL (lcons l r)) true -> Path Bool (nisz r) false -> Path Bool (isNormL r) true :=
+  \l r hn hz -> elim Bool (\c -> Path Bool (nisz r) c -> Path Bool (elim Bool (\_ -> Bool) (wlt 0 l) (isNormL r) c) true -> Path Bool (isNormL r) true)
+    (\ht _ -> elim Empty (\_ -> Path Bool (isNormL r) true) (trueNotFalse (compPath Bool true (nisz r) false (sym Bool (nisz r) true ht) hz)))
+    (\_ h -> h) (nisz r) (prefl Bool (nisz r)) hn
+def normL_head : (l : Word) (r : NB) -> Path Bool (isNormL (lcons l r)) true -> Path Bool (nisz r) true -> Path Bool (wlt 0 l) true :=
+  \l r hn hz -> elim Bool (\c -> Path Bool (nisz r) c -> Path Bool (elim Bool (\_ -> Bool) (wlt 0 l) (isNormL r) c) true -> Path Bool (wlt 0 l) true)
+    (\_ h -> h)
+    (\hf _ -> elim Empty (\_ -> Path Bool (wlt 0 l) true) (trueNotFalse (compPath Bool true (nisz r) false (sym Bool (nisz r) true hz) hf)))
+    (nisz r) (prefl Bool (nisz r)) hn
+-- a normalised nonempty chain is positive
+def normL_pos : (x : NB) -> Path Bool (isNormL x) true -> Path Bool (nisz x) false -> Le 1 (wbvalL x) :=
+  elim List (\x -> Path Bool (isNormL x) true -> Path Bool (nisz x) false -> Le 1 (wbvalL x))
+    (\_ hz -> elim Empty (\_ -> Le 1 0) (trueNotFalse hz))
+    (\l r ih -> \hn _ ->
+      let L : Nat := wlimb l in
+      let V : Nat := wbvalL r in
+      elim Bool (\c -> Path Bool (nisz r) c -> Le 1 (add L (mul V M64)))
+        (\hz -> le_trans 1 L (add L (mul V M64)) (lt_le 0 L (wlt_true 0 l (normL_head l r hn hz))) (mul V M64, prefl Nat (add L (mul V M64))))
+        (\hz ->
+          let hv : Le 1 V := ih (normL_tail l r hn hz) hz in
+          let d : Nat := fst hv in
+          le_trans 1 (mul V M64) (add L (mul V M64))
+            (substId (\v -> Le 1 (mul v M64)) (pathToId (snd hv)) (add M63 (mul d M64), prefl Nat (add M64 (mul d M64))))
+            (L, add_comm (mul V M64) L))
+        (nisz r) (prefl Bool (nisz r)))
+def nsucc_val : (x : NB) -> Path Nat (wbvalL (nsucc x)) (suc (wbvalL x)) :=
+  elim List (\x -> Path Nat (wbvalL (nsucc x)) (suc (wbvalL x))) (prefl Nat 1)
+    (\l r ih ->
+      let L : Nat := wlimb l in
+      let V : Nat := wbvalL r in
+      elim Bool (\c -> Path Bool (weq l wM63) c -> Path Nat (wbvalL (elim Bool (\_ -> NB) (lcons 0 (nsucc r)) (lcons (wadd l 1) r) c)) (suc (add L (mul V M64))))
+        (\ht ->
+          let hL : Path Nat L M63 := weq_true l wM63 ht in
+          compPath Nat (wbvalL (lcons 0 (nsucc r))) (mul (suc V) M64) (suc (add L (mul V M64)))
+            (cong Nat Nat (\w -> add 0 (mul w M64)) (wbvalL (nsucc r)) (suc V) ih)
+            (cong Nat Nat (\w -> suc (add w (mul V M64))) M63 L (sym Nat L M63 hL)))
+        (\hf ->
+          let hlt : Lt L M63 := le_neq_lt L M63 (wlimb_le_M63 l) (weq_false l wM63 hf) in
+          let hfit : Lt (add L 1) M64 := substId (\v -> Lt v M64) (pathToId (sym Nat (add L 1) (suc L) (add_one_r L))) (le_ble (suc (suc L)) M64 (le_suc_both (suc L) M63 (lt_le L M63 hlt))) in
+          let hw : Path Nat (wlimb (wadd l 1)) (add L 1) := mod_small M63 (add L 1) hfit in
+          compPath Nat (wbvalL (lcons (wadd l 1) r)) (add (add L 1) (mul V M64)) (suc (add L (mul V M64)))
+            (cong Nat Nat (\w -> add w (mul V M64)) (wlimb (wadd l 1)) (add L 1) hw)
+            (cong Nat Nat (\w -> add w (mul V M64)) (add L 1) (suc L) (add_one_r L)))
+        (weq l wM63) (prefl Bool (weq l wM63)))
+def npred_val : (x : NB) -> Path Bool (isNormL x) true -> Path Nat (wbvalL (npred x)) (pred (wbvalL x)) :=
+  elim List (\x -> Path Bool (isNormL x) true -> Path Nat (wbvalL (npred x)) (pred (wbvalL x)))
+    (\_ -> prefl Nat 0)
+    (\l r ih -> \hn ->
+      let L : Nat := wlimb l in
+      let V : Nat := wbvalL r in
+      let G : Nat := pred (add L (mul V M64)) in
+      elim Bool (\c -> Path Bool (wlt 1 l) c -> Path Nat (wbvalL (elim Bool (\_ -> NB)
+             (lcons (wsub l 1) r)
+             (elim Bool (\_ -> NB)
+                (elim Bool (\_ -> NB) (lnil {Word}) (lcons 0 r) (nisz r))
+                (elim Bool (\_ -> NB) (lnil {Word}) (lcons wM63 (npred r)) (nisz r))
+                (wlt 0 l))
+             c)) G)
+        (\h2 ->
+          let h1 : Le 1 L := le_trans 1 2 L (1, prefl Nat 2) (lt_le 1 L (wlt_true 1 l h2)) in
+          let d : Nat := fst h1 in
+          let hL : Path Nat L (suc d) := sym Nat (suc d) L (snd h1) in
+          let hs : Path Nat (wlimb (wsub l 1)) (sub L 1) := wsub_ge l 1 h1 in
+          compPath Nat (wbvalL (lcons (wsub l 1) r)) (add (sub L 1) (mul V M64)) G
+            (cong Nat Nat (\w -> add w (mul V M64)) (wlimb (wsub l 1)) (sub L 1) hs)
+            (substId (\w -> Path Nat (add (sub w 1) (mul V M64)) (pred (add w (mul V M64)))) (pathToId (sym Nat L (suc d) hL)) (prefl Nat (add d (mul V M64)))))
+        (\hnot2 ->
+          elim Bool (\c -> Path Bool (wlt 0 l) c -> Path Nat (wbvalL (elim Bool (\_ -> NB)
+                 (elim Bool (\_ -> NB) (lnil {Word}) (lcons 0 r) (nisz r))
+                 (elim Bool (\_ -> NB) (lnil {Word}) (lcons wM63 (npred r)) (nisz r))
+                 c)) G)
+            (\h1 ->
+              let hL : Path Nat L 1 := le_antisym L 1 (wlt_false 1 l hnot2) (lt_le 0 L (wlt_true 0 l h1)) in
+              elim Bool (\c -> Path Bool (nisz r) c -> Path Nat (wbvalL (elim Bool (\_ -> NB) (lnil {Word}) (lcons 0 r) c)) G)
+                (\hz ->
+                  let hV : Path Nat V 0 := nisz_true_zero r hz in
+                  substId (\w -> Path Nat 0 (pred (add w (mul V M64)))) (pathToId (sym Nat L 1 hL))
+                    (substId (\v -> Path Nat 0 (pred (add 1 (mul v M64)))) (pathToId (sym Nat V 0 hV)) (prefl Nat 0)))
+                (\_ -> substId (\w -> Path Nat (add 0 (mul V M64)) (pred (add w (mul V M64)))) (pathToId (sym Nat L 1 hL)) (prefl Nat (mul V M64)))
+                (nisz r) (prefl Bool (nisz r)))
+            (\h0 ->
+              let hL : Path Nat L 0 := le_antisym L 0 (wlt_false 0 l h0) (L, prefl Nat L) in
+              elim Bool (\c -> Path Bool (nisz r) c -> Path Nat (wbvalL (elim Bool (\_ -> NB) (lnil {Word}) (lcons wM63 (npred r)) c)) G)
+                (\hz ->
+                  let hV : Path Nat V 0 := nisz_true_zero r hz in
+                  substId (\w -> Path Nat 0 (pred (add w (mul V M64)))) (pathToId (sym Nat L 0 hL))
+                    (substId (\v -> Path Nat 0 (pred (add 0 (mul v M64)))) (pathToId (sym Nat V 0 hV)) (prefl Nat 0)))
+                (\hz ->
+                  let hnr : Path Bool (isNormL r) true := normL_tail l r hn hz in
+                  let hp : Path Nat (wbvalL (npred r)) (pred V) := ih hnr in
+                  let hv : Le 1 V := normL_pos r hnr hz in
+                  let d : Nat := fst hv in
+                  let hd : Path Nat V (suc d) := sym Nat (suc d) V (snd hv) in
+                  compPath Nat (wbvalL (lcons wM63 (npred r))) (add M63 (mul (pred V) M64)) G
+                    (cong Nat Nat (\w -> add M63 (mul w M64)) (wbvalL (npred r)) (pred V) hp)
+                    (substId (\v -> Path Nat (add M63 (mul (pred v) M64)) (pred (add L (mul v M64)))) (pathToId (sym Nat V (suc d) hd))
+                       (substId (\w -> Path Nat (add M63 (mul d M64)) (pred (add w (mul (suc d) M64)))) (pathToId (sym Nat L 0 hL))
+                          (prefl Nat (add M63 (mul d M64))))))
+                (nisz r) (prefl Bool (nisz r)))
+            (wlt 0 l) (prefl Bool (wlt 0 l)))
+        (wlt 1 l) (prefl Bool (wlt 1 l)))
+-- ---- the interface keeps the normal form ----
+def wlt_of_lt : (a b : Word) -> Lt (wlimb a) (wlimb b) -> Path Bool (wlt a b) true :=
+  \a b h -> substId (\v -> Path Bool (n2b v) true) (symId h) (prefl Bool true)
+def isNormL_of_cons : (l : Word) (r : NB) -> Path Bool (isNormL (lcons l r)) true -> Path Bool (isNormL r) true :=
+  \l r hn -> elim List (\r -> Path Bool (isNormL (lcons l r)) true -> Path Bool (isNormL r) true)
+    (\_ -> prefl Bool true)
+    (\a s _ -> \h -> normL_tail l (lcons a s) h (prefl Bool false)) r hn
+def nsucc_nonempty : (x : NB) -> Path Bool (nisz (nsucc x)) false :=
+  elim List (\x -> Path Bool (nisz (nsucc x)) false) (prefl Bool false)
+    (\l r _ -> elim Bool (\c -> Path Bool (nisz (elim Bool (\_ -> NB) (lcons 0 (nsucc r)) (lcons (wadd l 1) r) c)) false)
+       (prefl Bool false) (prefl Bool false) (weq l wM63))
+def wadd1_val : (l : Word) -> Path Bool (weq l wM63) false -> Path Nat (wlimb (wadd l 1)) (add (wlimb l) 1) :=
+  \l hf ->
+  let L : Nat := wlimb l in
+  let hlt : Lt L M63 := le_neq_lt L M63 (wlimb_le_M63 l) (weq_false l wM63 hf) in
+  let hfit : Lt (add L 1) M64 := substId (\v -> Lt v M64) (pathToId (sym Nat (add L 1) (suc L) (add_one_r L))) (le_ble (suc (suc L)) M64 (le_suc_both (suc L) M63 (lt_le L M63 hlt))) in
+  mod_small M63 (add L 1) hfit
+def nsucc_norm : (x : NB) -> Path Bool (isNormL x) true -> Path Bool (isNormL (nsucc x)) true :=
+  elim List (\x -> Path Bool (isNormL x) true -> Path Bool (isNormL (nsucc x)) true)
+    (\_ -> prefl Bool true)
+    (\l r ih -> \hn ->
+      let L : Nat := wlimb l in
+      elim Bool (\c -> Path Bool (weq l wM63) c -> Path Bool (isNormL (elim Bool (\_ -> NB) (lcons 0 (nsucc r)) (lcons (wadd l 1) r) c)) true)
+        (\_ -> substId (\c -> Path Bool (elim Bool (\_ -> Bool) (wlt 0 0) (isNormL (nsucc r)) c) true)
+                 (pathToId (sym Bool (nisz (nsucc r)) false (nsucc_nonempty r))) (ih (isNormL_of_cons l r hn)))
+        (\hf -> elim Bool (\c -> Path Bool (nisz r) c -> Path Bool (elim Bool (\_ -> Bool) (wlt 0 (wadd l 1)) (isNormL r) c) true)
+                  (\_ -> wlt_of_lt 0 (wadd l 1) (substId (\v -> Lt 0 v) (pathToId (sym Nat (wlimb (wadd l 1)) (add L 1) (wadd1_val l hf))) (le_ble 1 (add L 1) (L, add_comm 1 L))))
+                  (\hz -> normL_tail l r hn hz)
+                  (nisz r) (prefl Bool (nisz r)))
+        (weq l wM63) (prefl Bool (weq l wM63)))
+def npred_norm : (x : NB) -> Path Bool (isNormL x) true -> Path Bool (isNormL (npred x)) true :=
+  elim List (\x -> Path Bool (isNormL x) true -> Path Bool (isNormL (npred x)) true)
+    (\_ -> prefl Bool true)
+    (\l r ih -> \hn ->
+      let L : Nat := wlimb l in
+      elim Bool (\c -> Path Bool (wlt 1 l) c -> Path Bool (isNormL (elim Bool (\_ -> NB)
+             (lcons (wsub l 1) r)
+             (elim Bool (\_ -> NB)
+                (elim Bool (\_ -> NB) (lnil {Word}) (lcons 0 r) (nisz r))
+                (elim Bool (\_ -> NB) (lnil {Word}) (lcons wM63 (npred r)) (nisz r))
+                (wlt 0 l))
+             c)) true)
+        (\h2 ->
+          let h2l : Le 2 L := lt_le 1 L (wlt_true 1 l h2) in
+          let e : Nat := fst h2l in
+          let hL : Path Nat L (suc (suc e)) := sym Nat (suc (suc e)) L (snd h2l) in
+          let h1 : Le 1 L := le_trans 1 2 L (1, prefl Nat 2) h2l in
+          let hs : Path Nat (wlimb (wsub l 1)) (sub L 1) := wsub_ge l 1 h1 in
+          let hpos : Lt 0 (sub L 1) := substId (\w -> Lt 0 (sub w 1)) (pathToId (sym Nat L (suc (suc e)) hL)) (le_ble 1 (suc e) (e, prefl Nat (suc e))) in
+          elim Bool (\c -> Path Bool (nisz r) c -> Path Bool (elim Bool (\_ -> Bool) (wlt 0 (wsub l 1)) (isNormL r) c) true)
+            (\_ -> wlt_of_lt 0 (wsub l 1) (substId (\v -> Lt 0 v) (pathToId (sym Nat (wlimb (wsub l 1)) (sub L 1) hs)) hpos))
+            (\hz -> normL_tail l r hn hz)
+            (nisz r) (prefl Bool (nisz r)))
+        (\_ ->
+          elim Bool (\c -> Path Bool (wlt 0 l) c -> Path Bool (isNormL (elim Bool (\_ -> NB)
+                 (elim Bool (\_ -> NB) (lnil {Word}) (lcons 0 r) (nisz r))
+                 (elim Bool (\_ -> NB) (lnil {Word}) (lcons wM63 (npred r)) (nisz r))
+                 c)) true)
+            (\_ -> elim Bool (\c -> Path Bool (nisz r) c -> Path Bool (isNormL (elim Bool (\_ -> NB) (lnil {Word}) (lcons 0 r) c)) true)
+                     (\_ -> prefl Bool true)
+                     (\hz -> substId (\c -> Path Bool (elim Bool (\_ -> Bool) (wlt 0 0) (isNormL r) c) true) (pathToId (sym Bool (nisz r) false hz)) (normL_tail l r hn hz))
+                     (nisz r) (prefl Bool (nisz r)))
+            (\_ -> elim Bool (\c -> Path Bool (nisz r) c -> Path Bool (isNormL (elim Bool (\_ -> NB) (lnil {Word}) (lcons wM63 (npred r)) c)) true)
+                     (\_ -> prefl Bool true)
+                     (\hz -> elim Bool (\c -> Path Bool (nisz (npred r)) c -> Path Bool (elim Bool (\_ -> Bool) (wlt 0 wM63) (isNormL (npred r)) c) true)
+                               (\_ -> prefl Bool true)
+                               (\_ -> ih (normL_tail l r hn hz))
+                               (nisz (npred r)) (prefl Bool (nisz (npred r))))
+                     (nisz r) (prefl Bool (nisz r)))
+            (wlt 0 l) (prefl Bool (wlt 0 l)))
+        (wlt 1 l) (prefl Bool (wlt 1 l)))
+
+-- ---- the arithmetic on NB: word.tt's folds through reversal, normalised, the laws carried over ----
+-- toNB brings a high-first chain to NB normalised; the value is unchanged (wnorm_val, then the reversal).
+def isNormM : WB -> Bool := elim List (\_ -> Bool) true (\l _ _ -> wlt 0 l)
+def wnorm_normM : (z : WB) -> Path Bool (isNormM (wnorm z)) true :=
+  elim List (\z -> Path Bool (isNormM (wnorm z)) true) (prefl Bool true)
+    (\l r ih -> elim Bool (\c -> Path Bool (wlt 0 l) c -> Path Bool (isNormM (elim Bool (\_ -> WB) (lcons l r) (wnorm r) c)) true)
+       (\ht -> ht) (\_ -> ih) (wlt 0 l) (prefl Bool (wlt 0 l)))
+def wsnoc_nonempty : (s : WB) (l : Word) -> Path Bool (nisz (wsnoc s l)) false :=
+  \s l -> elim List (\s -> Path Bool (nisz (wsnoc s l)) false) (prefl Bool false) (\_ _ _ -> prefl Bool false) s
+def isNormL_snoc : (s : WB) (l : Word) -> Path Bool (isNormL (wsnoc s l)) (wlt 0 l) :=
+  \s l -> elim List (\s -> Path Bool (isNormL (wsnoc s l)) (wlt 0 l)) (prefl Bool (wlt 0 l))
+    (\a r ih -> compPath Bool (isNormL (lcons a (wsnoc r l))) (isNormL (wsnoc r l)) (wlt 0 l)
+       (substId (\c -> Path Bool (elim Bool (\_ -> Bool) (wlt 0 a) (isNormL (wsnoc r l)) c) (isNormL (wsnoc r l)))
+          (pathToId (sym Bool (nisz (wsnoc r l)) false (wsnoc_nonempty r l))) (prefl Bool (isNormL (wsnoc r l))))
+       ih) s
+def isNormL_rev : (z : WB) -> Path Bool (isNormM z) true -> Path Bool (isNormL (rev z)) true :=
+  elim List (\z -> Path Bool (isNormM z) true -> Path Bool (isNormL (rev z)) true)
+    (\_ -> prefl Bool true)
+    (\l r _ -> \h -> compPath Bool (isNormL (wsnoc (rev r) l)) (wlt 0 l) true (isNormL_snoc (rev r) l) h)
+def toNB (z : WB) : NB := rev (wnorm z)
+def toNB_val : (z : WB) -> Path Nat (wbvalL (toNB z)) (wbval z) :=
+  \z -> compPath Nat (wbvalL (rev (wnorm z))) (wbval (wnorm z)) (wbval z)
+          (sym Nat (wbval (wnorm z)) (wbvalL (rev (wnorm z))) (wbval_revL (wnorm z))) (wnorm_val z)
+def toNB_norm : (z : WB) -> Path Bool (isNormL (toNB z)) true := \z -> isNormL_rev (wnorm z) (wnorm_normM z)
+-- a binary fold's law, carried: the operands reversed in, the result normalised and reversed out
+def via2 (f : WB -> WB -> WB) (g : Nat -> Nat -> Nat) (law : (a b : WB) -> Path Nat (wbval (f a b)) (g (wbval a) (wbval b))) (x y : NB)
+  : Path Nat (wbvalL (toNB (f (rev x) (rev y)))) (g (wbvalL x) (wbvalL y)) :=
+  compPath Nat (wbvalL (toNB (f (rev x) (rev y)))) (wbval (f (rev x) (rev y))) (g (wbvalL x) (wbvalL y))
+    (toNB_val (f (rev x) (rev y)))
+    (compPath Nat (wbval (f (rev x) (rev y))) (g (wbval (rev x)) (wbval (rev y))) (g (wbvalL x) (wbvalL y))
+       (law (rev x) (rev y))
+       (compPath Nat (g (wbval (rev x)) (wbval (rev y))) (g (wbvalL x) (wbval (rev y))) (g (wbvalL x) (wbvalL y))
+          (cong Nat Nat (\w -> g w (wbval (rev y))) (wbval (rev x)) (wbvalL x) (sym Nat (wbvalL x) (wbval (rev x)) (wbvalL_rev x)))
+          (cong Nat Nat (\w -> g (wbvalL x) w) (wbval (rev y)) (wbvalL y) (sym Nat (wbvalL y) (wbval (rev y)) (wbvalL_rev y)))))
+def via2N (f : WB -> WB -> Nat) (g : Nat -> Nat -> Nat) (law : (a b : WB) -> Path Nat (f a b) (g (wbval a) (wbval b))) (x y : NB)
+  : Path Nat (f (rev x) (rev y)) (g (wbvalL x) (wbvalL y)) :=
+  compPath Nat (f (rev x) (rev y)) (g (wbval (rev x)) (wbval (rev y))) (g (wbvalL x) (wbvalL y))
+    (law (rev x) (rev y))
+    (compPath Nat (g (wbval (rev x)) (wbval (rev y))) (g (wbvalL x) (wbval (rev y))) (g (wbvalL x) (wbvalL y))
+       (cong Nat Nat (\w -> g w (wbval (rev y))) (wbval (rev x)) (wbvalL x) (sym Nat (wbvalL x) (wbval (rev x)) (wbvalL_rev x)))
+       (cong Nat Nat (\w -> g (wbvalL x) w) (wbval (rev y)) (wbvalL y) (sym Nat (wbvalL y) (wbval (rev y)) (wbvalL_rev y))))
+def naddN (x y : NB) : NB := toNB (nadd (rev x) (rev y))
+def nsubN (x y : NB) : NB := toNB (nsub (rev x) (rev y))
+def nmulN (x y : NB) : NB := toNB (nmul (rev x) (rev y))
+def npowN (x y : NB) : NB := toNB (bpow_wb (rev x) (rev y))
+def ndivN (x y : NB) : NB := toNB (bdiv_wb (rev x) (rev y))
+def nmodN (x y : NB) : NB := toNB (bmod_wb (rev x) (rev y))
+def nminvN (x y : NB) : NB := toNB (bminv_wb (rev x) (rev y))
+def npowmodN (x e m : NB) : NB := toNB (bpowmod_wb (rev x) (rev e) (rev m))
+def nltN (x y : NB) : Nat := blt_wb (rev x) (rev y)
+def nleN (x y : NB) : Nat := ble_wb (rev x) (rev y)
+def neqN (x y : NB) : Nat := beq_wb (rev x) (rev y)
+def naddN_val : (x y : NB) -> Path Nat (wbvalL (naddN x y)) (add (wbvalL x) (wbvalL y)) := via2 nadd add nadd_val
+def nsubN_val : (x y : NB) -> Path Nat (wbvalL (nsubN x y)) (sub (wbvalL x) (wbvalL y)) := via2 nsub sub nsub_val
+def nmulN_val : (x y : NB) -> Path Nat (wbvalL (nmulN x y)) (mul (wbvalL x) (wbvalL y)) := via2 nmul mul nmul_val
+def npowN_val : (x y : NB) -> Path Nat (wbvalL (npowN x y)) (pow (wbvalL x) (wbvalL y)) := via2 bpow_wb pow bpow_wb_val
+def ndivN_val : (x y : NB) -> Path Nat (wbvalL (ndivN x y)) (div (wbvalL x) (wbvalL y)) := via2 bdiv_wb div wnat_div
+def nmodN_val : (x y : NB) -> Path Nat (wbvalL (nmodN x y)) (mod (wbvalL x) (wbvalL y)) := via2 bmod_wb mod wnat_mod
+def nminvN_val : (x y : NB) -> Path Nat (wbvalL (nminvN x y)) (minv (wbvalL x) (wbvalL y)) := via2 bminv_wb minv bminv_wb_val
+def nltN_val : (x y : NB) -> Path Nat (nltN x y) (blt (wbvalL x) (wbvalL y)) := via2N blt_wb blt blt_wb_val
+def nleN_val : (x y : NB) -> Path Nat (nleN x y) (ble (wbvalL x) (wbvalL y)) := via2N ble_wb ble ble_wb_val
+def neqN_val : (x y : NB) -> Path Nat (neqN x y) (beq (wbvalL x) (wbvalL y)) := via2N beq_wb beq beq_wb_val
+def npowmodN_val : (x e m : NB) (m' : Nat) -> Path Nat (suc m') (wbvalL m) -> Path Nat (wbvalL (npowmodN x e m)) (mod (pow (wbvalL x) (wbvalL e)) (suc m')) :=
+  \x e m m' h ->
+  let hm : Path Nat (suc m') (wbval (rev m)) := compPath Nat (suc m') (wbvalL m) (wbval (rev m)) h (wbvalL_rev m) in
+  compPath Nat (wbvalL (npowmodN x e m)) (wbval (bpowmod_wb (rev x) (rev e) (rev m))) (mod (pow (wbvalL x) (wbvalL e)) (suc m'))
+    (toNB_val (bpowmod_wb (rev x) (rev e) (rev m)))
+    (compPath Nat (wbval (bpowmod_wb (rev x) (rev e) (rev m))) (mod (pow (wbval (rev x)) (wbval (rev e))) (suc m')) (mod (pow (wbvalL x) (wbvalL e)) (suc m'))
+       (bpowmod_wb_val (rev x) (rev e) (rev m) m' hm)
+       (compPath Nat (mod (pow (wbval (rev x)) (wbval (rev e))) (suc m')) (mod (pow (wbvalL x) (wbval (rev e))) (suc m')) (mod (pow (wbvalL x) (wbvalL e)) (suc m'))
+          (cong Nat Nat (\w -> mod (pow w (wbval (rev e))) (suc m')) (wbval (rev x)) (wbvalL x) (sym Nat (wbvalL x) (wbval (rev x)) (wbvalL_rev x)))
+          (cong Nat Nat (\w -> mod (pow (wbvalL x) w) (suc m')) (wbval (rev e)) (wbvalL e) (sym Nat (wbvalL e) (wbval (rev e)) (wbvalL_rev e)))))
+-- every result is normalised
+def naddN_norm : (x y : NB) -> Path Bool (isNormL (naddN x y)) true := \x y -> toNB_norm (nadd (rev x) (rev y))
+def nsubN_norm : (x y : NB) -> Path Bool (isNormL (nsubN x y)) true := \x y -> toNB_norm (nsub (rev x) (rev y))
+def nmulN_norm : (x y : NB) -> Path Bool (isNormL (nmulN x y)) true := \x y -> toNB_norm (nmul (rev x) (rev y))
+def npowN_norm : (x y : NB) -> Path Bool (isNormL (npowN x y)) true := \x y -> toNB_norm (bpow_wb (rev x) (rev y))
+def ndivN_norm : (x y : NB) -> Path Bool (isNormL (ndivN x y)) true := \x y -> toNB_norm (bdiv_wb (rev x) (rev y))
+def nmodN_norm : (x y : NB) -> Path Bool (isNormL (nmodN x y)) true := \x y -> toNB_norm (bmod_wb (rev x) (rev y))
+def nminvN_norm : (x y : NB) -> Path Bool (isNormL (nminvN x y)) true := \x y -> toNB_norm (bminv_wb (rev x) (rev y))
+
+-- ---- the Word <-> NB boundary: a word is the one-word chain (normalised), a chain's low word is its head ----
+def wsingleL (w : Word) : NB := elim Bool (\_ -> NB) (lcons w (lnil {Word})) (lnil {Word}) (wlt 0 w)
+def wsingleL_val : (w : Word) -> Path Nat (wbvalL (wsingleL w)) (wlimb w) :=
+  \w -> elim Bool (\c -> Path Bool (wlt 0 w) c -> Path Nat (wbvalL (elim Bool (\_ -> NB) (lcons w (lnil {Word})) (lnil {Word}) c)) (wlimb w))
+    (\_ -> add_zero_r (wlimb w))
+    (\hf -> sym Nat (wlimb w) 0 (le_antisym (wlimb w) 0 (wlt_false 0 w hf) (wlimb w, prefl Nat (wlimb w))))
+    (wlt 0 w) (prefl Bool (wlt 0 w))
+def wsingleL_norm : (w : Word) -> Path Bool (isNormL (wsingleL w)) true :=
+  \w -> elim Bool (\c -> Path Bool (wlt 0 w) c -> Path Bool (isNormL (elim Bool (\_ -> NB) (lcons w (lnil {Word})) (lnil {Word}) c)) true)
+    (\ht -> ht) (\_ -> prefl Bool true) (wlt 0 w) (prefl Bool (wlt 0 w))
+def wlowL : NB -> Word := elim List (\_ -> Word) 0 (\l _ _ -> l)
+def wlowL_val : (x : NB) -> Path Nat (wlimb (wlowL x)) (mod (wbvalL x) M64) :=
+  elim List (\x -> Path Nat (wlimb (wlowL x)) (mod (wbvalL x) M64)) (prefl Nat 0)
+    (\l r _ -> sym Nat (mod (add (wlimb l) (mul (wbvalL r) M64)) M64) (wlimb l)
+       (compPath Nat (mod (add (wlimb l) (mul (wbvalL r) M64)) M64) (mod (wlimb l) M64) (wlimb l)
+          (mod_add_mul (wlimb l) (wbvalL r) M63) (mod_small M63 (wlimb l) (snd l))))
+
+-- ---- the bundle: the representation of the Nat the erasure runs, with its licence ----
+-- The single erasure reads this by position: the type, zero, the successor, the empty test, the predecessor, the value,
+-- the normal-form test, the word boundary, then the natives in the kernel's order (add sub mul div mod pow eq lt le minv),
+-- and then the laws that license each of them. A program never names it: `represent Nat nbNat` in this file does.
+def NatRepr : U 1 :=
+  Sigma (U) (\rR -> Sigma (rR) (\rzero -> Sigma (rR -> rR) (\rsucc -> Sigma (rR -> Bool) (\risz -> Sigma (rR -> rR) (\rpred -> Sigma (rR -> Nat) (\rtoNat -> Sigma (rR -> Bool) (\rnorm -> Sigma (Word -> rR) (\rsingle -> Sigma (rR -> Word) (\rlow -> Sigma (rR -> rR -> rR) (\radd -> Sigma (rR -> rR -> rR) (\rsub -> Sigma (rR -> rR -> rR) (\rmul -> Sigma (rR -> rR -> rR) (\rdiv -> Sigma (rR -> rR -> rR) (\rmod -> Sigma (rR -> rR -> rR) (\rpow -> Sigma (rR -> rR -> Nat) (\req -> Sigma (rR -> rR -> Nat) (\rlt -> Sigma (rR -> rR -> Nat) (\rle -> Sigma (rR -> rR -> rR) (\rminv -> Sigma (Path Bool (rnorm rzero) true) (\lzero_norm -> Sigma (Path Nat (rtoNat rzero) 0) (\lzero_val -> Sigma ((x : rR) -> Path Nat (rtoNat (rsucc x)) (suc (rtoNat x))) (\lsucc_val -> Sigma ((x : rR) -> Path Bool (rnorm x) true -> Path Bool (rnorm (rsucc x)) true) (\lsucc_norm -> Sigma ((x : rR) -> Path Bool (rnorm x) true -> Path Nat (rtoNat (rpred x)) (pred (rtoNat x))) (\lpred_val -> Sigma ((x : rR) -> Path Bool (rnorm x) true -> Path Bool (rnorm (rpred x)) true) (\lpred_norm -> Sigma ((x : rR) -> Path Bool (risz x) true -> Path Nat (rtoNat x) 0) (\lisz_true -> Sigma ((x : rR) -> Path Bool (rnorm x) true -> Path Bool (risz x) false -> Le 1 (rtoNat x)) (\lisz_false -> Sigma ((w : Word) -> Path Nat (rtoNat (rsingle w)) (wlimb w)) (\lsingle_val -> Sigma ((w : Word) -> Path Bool (rnorm (rsingle w)) true) (\lsingle_norm -> Sigma ((x : rR) -> Path Nat (wlimb (rlow x)) (mod (rtoNat x) M64)) (\llow_val -> Sigma ((x y : rR) -> Path Nat (rtoNat (radd x y)) (add (rtoNat x) (rtoNat y))) (\ladd_val -> Sigma ((x y : rR) -> Path Bool (rnorm (radd x y)) true) (\ladd_norm -> Sigma ((x y : rR) -> Path Nat (rtoNat (rsub x y)) (sub (rtoNat x) (rtoNat y))) (\lsub_val -> Sigma ((x y : rR) -> Path Bool (rnorm (rsub x y)) true) (\lsub_norm -> Sigma ((x y : rR) -> Path Nat (rtoNat (rmul x y)) (mul (rtoNat x) (rtoNat y))) (\lmul_val -> Sigma ((x y : rR) -> Path Bool (rnorm (rmul x y)) true) (\lmul_norm -> Sigma ((x y : rR) -> Path Nat (rtoNat (rdiv x y)) (div (rtoNat x) (rtoNat y))) (\ldiv_val -> Sigma ((x y : rR) -> Path Bool (rnorm (rdiv x y)) true) (\ldiv_norm -> Sigma ((x y : rR) -> Path Nat (rtoNat (rmod x y)) (mod (rtoNat x) (rtoNat y))) (\lmod_val -> Sigma ((x y : rR) -> Path Bool (rnorm (rmod x y)) true) (\lmod_norm -> Sigma ((x y : rR) -> Path Nat (rtoNat (rpow x y)) (pow (rtoNat x) (rtoNat y))) (\lpow_val -> Sigma ((x y : rR) -> Path Bool (rnorm (rpow x y)) true) (\lpow_norm -> Sigma ((x y : rR) -> Path Nat (req x y) (beq (rtoNat x) (rtoNat y))) (\leq_val -> Sigma ((x y : rR) -> Path Nat (rlt x y) (blt (rtoNat x) (rtoNat y))) (\llt_val -> Sigma ((x y : rR) -> Path Nat (rle x y) (ble (rtoNat x) (rtoNat y))) (\lle_val -> Sigma ((x y : rR) -> Path Nat (rtoNat (rminv x y)) (minv (rtoNat x) (rtoNat y))) (\lminv_val -> (x y : rR) -> Path Bool (rnorm (rminv x y)) true))))))))))))))))))))))))))))))))))))))))))))))
+def nbNat : NatRepr :=
+  (NB, (nzero, (nsucc, (nisz, (npred, (wbvalL, (isNormL, (wsingleL, (wlowL, (naddN, (nsubN, (nmulN, (ndivN, (nmodN, (npowN, (neqN, (nltN, (nleN, (nminvN, (prefl Bool true, (prefl Nat 0, (nsucc_val, (nsucc_norm, (npred_val, (npred_norm, (nisz_true_zero, (normL_pos, (wsingleL_val, (wsingleL_norm, (wlowL_val, (naddN_val, (naddN_norm, (nsubN_val, (nsubN_norm, (nmulN_val, (nmulN_norm, (ndivN_val, (ndivN_norm, (nmodN_val, (nmodN_norm, (npowN_val, (npowN_norm, (neqN_val, (nltN_val, (nleN_val, (nminvN_val, nminvN_norm))))))))))))))))))))))))))))))))))))))))))))))
+def nbNat_R : U := fst (nbNat)
+def nbNat_zero : NB := fst (snd (nbNat))
+def nbNat_succ : NB -> NB := fst (snd (snd (nbNat)))
+def nbNat_isz : NB -> Bool := fst (snd (snd (snd (nbNat))))
+def nbNat_pred : NB -> NB := fst (snd (snd (snd (snd (nbNat)))))
+def nbNat_toNat : NB -> Nat := fst (snd (snd (snd (snd (snd (nbNat))))))
+def nbNat_norm : NB -> Bool := fst (snd (snd (snd (snd (snd (snd (nbNat)))))))
+def nbNat_single : Word -> NB := fst (snd (snd (snd (snd (snd (snd (snd (nbNat))))))))
+def nbNat_low : NB -> Word := fst (snd (snd (snd (snd (snd (snd (snd (snd (nbNat)))))))))
+def nbNat_add : NB -> NB -> NB := fst (snd (snd (snd (snd (snd (snd (snd (snd (snd (nbNat))))))))))
+def nbNat_sub : NB -> NB -> NB := fst (snd (snd (snd (snd (snd (snd (snd (snd (snd (snd (nbNat)))))))))))
+def nbNat_mul : NB -> NB -> NB := fst (snd (snd (snd (snd (snd (snd (snd (snd (snd (snd (snd (nbNat))))))))))))
+def nbNat_div : NB -> NB -> NB := fst (snd (snd (snd (snd (snd (snd (snd (snd (snd (snd (snd (snd (nbNat)))))))))))))
+def nbNat_mod : NB -> NB -> NB := fst (snd (snd (snd (snd (snd (snd (snd (snd (snd (snd (snd (snd (snd (nbNat))))))))))))))
+def nbNat_pow : NB -> NB -> NB := fst (snd (snd (snd (snd (snd (snd (snd (snd (snd (snd (snd (snd (snd (snd (nbNat)))))))))))))))
+def nbNat_eq : NB -> NB -> Nat := fst (snd (snd (snd (snd (snd (snd (snd (snd (snd (snd (snd (snd (snd (snd (snd (nbNat))))))))))))))))
+def nbNat_lt : NB -> NB -> Nat := fst (snd (snd (snd (snd (snd (snd (snd (snd (snd (snd (snd (snd (snd (snd (snd (snd (nbNat)))))))))))))))))
+def nbNat_le : NB -> NB -> Nat := fst (snd (snd (snd (snd (snd (snd (snd (snd (snd (snd (snd (snd (snd (snd (snd (snd (snd (nbNat))))))))))))))))))
+def nbNat_minv : NB -> NB -> NB := fst (snd (snd (snd (snd (snd (snd (snd (snd (snd (snd (snd (snd (snd (snd (snd (snd (snd (snd (nbNat)))))))))))))))))))
