@@ -2,6 +2,7 @@
 #import nat
 #import word
 #import wnat
+#represent nbNat
 -- nb.tt: the run-time Nat (M18, stage i). A natural at run time is NB: the list of its machine words with the
 -- LOW word first (word.tt's WB is high word first), normalised - no trailing zero word, so zero is the empty
 -- list. The low word at the head is what makes the successor and the predecessor one word operation each,
