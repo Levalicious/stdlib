@@ -50,26 +50,26 @@ def posToNB_val : (p : Pos) -> Path Nat (wbvalL (posToNB p)) (valP p) :=
 def numToNB_val : (x : Num) -> Path Nat (wbvalL (numToNB x)) (valN x) :=
   elim Num (\x -> Path Nat (wbvalL (numToNB x)) (valN x)) (prefl Nat 0) (\p -> posToNB_val p)
 -- list append, and how it meets wsnoc
-def app : WB -> WB -> WB := \x y -> elim List (\_ -> WB) y (\a _ ih -> lcons a ih) x
-def app_snoc : (x : WB) (l : Word) (y : WB) -> Path WB (app (wsnoc x l) y) (app x (lcons l y)) :=
-  \x l y -> elim List (\x -> Path WB (app (wsnoc x l) y) (app x (lcons l y))) (prefl WB (lcons l y))
-    (\a r ih -> cong WB WB (\z -> lcons a z) (app (wsnoc r l) y) (app r (lcons l y)) ih) x
-def app_single : (x : WB) (l : Word) -> Path WB (app x (lcons l (lnil {Word}))) (wsnoc x l) :=
-  \x l -> elim List (\x -> Path WB (app x (lcons l (lnil {Word}))) (wsnoc x l)) (prefl WB (lcons l (lnil {Word})))
-    (\a r ih -> cong WB WB (\z -> lcons a z) (app r (lcons l (lnil {Word}))) (wsnoc r l) ih) x
+def wbapp : WB -> WB -> WB := \x y -> elim List (\_ -> WB) y (\a _ ih -> lcons a ih) x
+def wbapp_snoc : (x : WB) (l : Word) (y : WB) -> Path WB (wbapp (wsnoc x l) y) (wbapp x (lcons l y)) :=
+  \x l y -> elim List (\x -> Path WB (wbapp (wsnoc x l) y) (wbapp x (lcons l y))) (prefl WB (lcons l y))
+    (\a r ih -> cong WB WB (\z -> lcons a z) (wbapp (wsnoc r l) y) (wbapp r (lcons l y)) ih) x
+def wbapp_single : (x : WB) (l : Word) -> Path WB (wbapp x (lcons l (lnil {Word}))) (wsnoc x l) :=
+  \x l -> elim List (\x -> Path WB (wbapp x (lcons l (lnil {Word}))) (wsnoc x l)) (prefl WB (lcons l (lnil {Word})))
+    (\a r ih -> cong WB WB (\z -> lcons a z) (wbapp r (lcons l (lnil {Word}))) (wsnoc r l) ih) x
 -- the words below the top, pushed under an accumulator: the high-first rest r of a normalised chain, lowest last
 def posGo : WB -> Pos -> Pos := \r -> elim List (\_ -> Pos -> Pos) (\acc -> acc) (\l _ ih -> \acc -> ih (consP l acc)) r
 def posOfWB (h : WordPos) (r : WB) : Pos := posGo r (topP h)
-def posGo_toNB : (r : WB) (acc : Pos) -> Path NB (posToNB (posGo r acc)) (app (rev r) (posToNB acc)) :=
-  \r -> elim List (\r -> (acc : Pos) -> Path NB (posToNB (posGo r acc)) (app (rev r) (posToNB acc)))
+def posGo_toNB : (r : WB) (acc : Pos) -> Path NB (posToNB (posGo r acc)) (wbapp (rev r) (posToNB acc)) :=
+  \r -> elim List (\r -> (acc : Pos) -> Path NB (posToNB (posGo r acc)) (wbapp (rev r) (posToNB acc)))
     (\acc -> prefl NB (posToNB acc))
-    (\l r' ih -> \acc -> compPath NB (posToNB (posGo r' (consP l acc))) (app (rev r') (lcons l (posToNB acc))) (app (wsnoc (rev r') l) (posToNB acc))
+    (\l r' ih -> \acc -> compPath NB (posToNB (posGo r' (consP l acc))) (wbapp (rev r') (lcons l (posToNB acc))) (wbapp (wsnoc (rev r') l) (posToNB acc))
        (ih (consP l acc))
-       (sym NB (app (wsnoc (rev r') l) (posToNB acc)) (app (rev r') (lcons l (posToNB acc))) (app_snoc (rev r') l (posToNB acc))))
+       (sym NB (wbapp (wsnoc (rev r') l) (posToNB acc)) (wbapp (rev r') (lcons l (posToNB acc))) (wbapp_snoc (rev r') l (posToNB acc))))
     r
 def posOfWB_toNB : (h : WordPos) (r : WB) -> Path NB (posToNB (posOfWB h r)) (rev (lcons (fst h) r)) :=
-  \h r -> compPath NB (posToNB (posGo r (topP h))) (app (rev r) (lcons (fst h) (lnil {Word}))) (wsnoc (rev r) (fst h))
-    (posGo_toNB r (topP h)) (app_single (rev r) (fst h))
+  \h r -> compPath NB (posToNB (posGo r (topP h))) (wbapp (rev r) (lcons (fst h) (lnil {Word}))) (wsnoc (rev r) (fst h))
+    (posGo_toNB r (topP h)) (wbapp_single (rev r) (fst h))
 def posOfWB_val : (h : WordPos) (r : WB) -> Path Nat (valP (posOfWB h r)) (wbval (lcons (fst h) r)) :=
   \h r -> compPath Nat (valP (posOfWB h r)) (wbvalL (posToNB (posOfWB h r))) (wbval (lcons (fst h) r))
     (sym Nat (wbvalL (posToNB (posOfWB h r))) (valP (posOfWB h r)) (posToNB_val (posOfWB h r)))
