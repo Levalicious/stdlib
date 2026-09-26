@@ -1,0 +1,310 @@
+#import prelude
+#import nat
+#import word
+#import wnat
+#import nb
+-- num.tt: the run-time Nat as a canonical positional numeral (M19, S1). A natural is zeroN or a positive
+-- numeral: its machine words LOW word first, ending in a nonzero top word (WordPos: a Word with 0 < w, the
+-- bound irrelevant as Word's own bound is). Zero is a nullary constructor, never an empty list; a leading zero
+-- word cannot be written, so every natural has exactly one form and valN is injective by construction. The
+-- interface (zeroN, sucN, iszN, predN) is one word operation at the low end; the arithmetic is nb.tt's NB
+-- folds through the conversions numToNB / numOfNB, whose value laws carry the NB laws over.
+
+-- ---- the type ----
+def WordPos : U := Sigma Word .(\w -> Lt 0 (fst w))
+def wppath {X Y : WordPos} (p : Path Word (fst X) (fst Y)) : Path WordPos X Y := \i -> (p i, snd X)
+def wplimb (w : WordPos) : Nat := wlimb (fst w)
+data Pos : U where
+  | topP : WordPos -> Pos
+  | consP : Word -> Pos -> Pos
+data Num : U where
+  | zeroN : Num
+  | posN : Pos -> Num
+
+-- ---- the value, and the digit laws (definitional) ----
+def valP : Pos -> Nat := elim Pos (\_ -> Nat) (\w -> wplimb w) (\l _ ih -> add (wlimb l) (mul ih M64))
+def valN : Num -> Nat := elim Num (\_ -> Nat) 0 (\p -> valP p)
+def val_zeroN : Path Nat (valN zeroN) 0 := prefl Nat 0
+def val_posN : (p : Pos) -> Path Nat (valN (posN p)) (valP p) := \p -> prefl Nat (valP p)
+def val_topP : (w : WordPos) -> Path Nat (valP (topP w)) (wplimb w) := \w -> prefl Nat (wplimb w)
+def val_consP : (l : Word) (p : Pos) -> Path Nat (valP (consP l p)) (add (wlimb l) (mul (valP p) M64)) := \l p -> prefl Nat (add (wlimb l) (mul (valP p) M64))
+-- a positive numeral is positive: the top word is, and a lower word only adds
+def valP_pos : (p : Pos) -> Le 1 (valP p) :=
+  elim Pos (\p -> Le 1 (valP p))
+    (\w -> lt_le 0 (wplimb w) (snd w))
+    (\l p ih ->
+      let L : Nat := wlimb l in
+      let V : Nat := valP p in
+      let d : Nat := fst ih in
+      le_trans 1 (mul V M64) (add L (mul V M64))
+        (substId (\v -> Le 1 (mul v M64)) (pathToId (snd ih)) (add M63 (mul d M64), prefl Nat (add M64 (mul d M64))))
+        (L, add_comm (mul V M64) L))
+
+-- ---- to the low-first chain, and back from a normalised high-first one ----
+def posToNB : Pos -> NB := elim Pos (\_ -> NB) (\w -> lcons (fst w) (lnil {Word})) (\l _ ih -> lcons l ih)
+def numToNB : Num -> NB := elim Num (\_ -> NB) (lnil {Word}) (\p -> posToNB p)
+def posToNB_val : (p : Pos) -> Path Nat (wbvalL (posToNB p)) (valP p) :=
+  elim Pos (\p -> Path Nat (wbvalL (posToNB p)) (valP p))
+    (\w -> add_zero_r (wplimb w))
+    (\l p ih -> cong Nat Nat (\v -> add (wlimb l) (mul v M64)) (wbvalL (posToNB p)) (valP p) ih)
+def numToNB_val : (x : Num) -> Path Nat (wbvalL (numToNB x)) (valN x) :=
+  elim Num (\x -> Path Nat (wbvalL (numToNB x)) (valN x)) (prefl Nat 0) (\p -> posToNB_val p)
+-- list append, and how it meets wsnoc
+def app : WB -> WB -> WB := \x y -> elim List (\_ -> WB) y (\a _ ih -> lcons a ih) x
+def app_snoc : (x : WB) (l : Word) (y : WB) -> Path WB (app (wsnoc x l) y) (app x (lcons l y)) :=
+  \x l y -> elim List (\x -> Path WB (app (wsnoc x l) y) (app x (lcons l y))) (prefl WB (lcons l y))
+    (\a r ih -> cong WB WB (\z -> lcons a z) (app (wsnoc r l) y) (app r (lcons l y)) ih) x
+def app_single : (x : WB) (l : Word) -> Path WB (app x (lcons l (lnil {Word}))) (wsnoc x l) :=
+  \x l -> elim List (\x -> Path WB (app x (lcons l (lnil {Word}))) (wsnoc x l)) (prefl WB (lcons l (lnil {Word})))
+    (\a r ih -> cong WB WB (\z -> lcons a z) (app r (lcons l (lnil {Word}))) (wsnoc r l) ih) x
+-- the words below the top, pushed under an accumulator: the high-first rest r of a normalised chain, lowest last
+def posGo : WB -> Pos -> Pos := \r -> elim List (\_ -> Pos -> Pos) (\acc -> acc) (\l _ ih -> \acc -> ih (consP l acc)) r
+def posOfWB (h : WordPos) (r : WB) : Pos := posGo r (topP h)
+def posGo_toNB : (r : WB) (acc : Pos) -> Path NB (posToNB (posGo r acc)) (app (rev r) (posToNB acc)) :=
+  \r -> elim List (\r -> (acc : Pos) -> Path NB (posToNB (posGo r acc)) (app (rev r) (posToNB acc)))
+    (\acc -> prefl NB (posToNB acc))
+    (\l r' ih -> \acc -> compPath NB (posToNB (posGo r' (consP l acc))) (app (rev r') (lcons l (posToNB acc))) (app (wsnoc (rev r') l) (posToNB acc))
+       (ih (consP l acc))
+       (sym NB (app (wsnoc (rev r') l) (posToNB acc)) (app (rev r') (lcons l (posToNB acc))) (app_snoc (rev r') l (posToNB acc))))
+    r
+def posOfWB_toNB : (h : WordPos) (r : WB) -> Path NB (posToNB (posOfWB h r)) (rev (lcons (fst h) r)) :=
+  \h r -> compPath NB (posToNB (posGo r (topP h))) (app (rev r) (lcons (fst h) (lnil {Word}))) (wsnoc (rev r) (fst h))
+    (posGo_toNB r (topP h)) (app_single (rev r) (fst h))
+def posOfWB_val : (h : WordPos) (r : WB) -> Path Nat (valP (posOfWB h r)) (wbval (lcons (fst h) r)) :=
+  \h r -> compPath Nat (valP (posOfWB h r)) (wbvalL (posToNB (posOfWB h r))) (wbval (lcons (fst h) r))
+    (sym Nat (wbvalL (posToNB (posOfWB h r))) (valP (posOfWB h r)) (posToNB_val (posOfWB h r)))
+    (compPath Nat (wbvalL (posToNB (posOfWB h r))) (wbvalL (rev (lcons (fst h) r))) (wbval (lcons (fst h) r))
+       (cong NB Nat wbvalL (posToNB (posOfWB h r)) (rev (lcons (fst h) r)) (posOfWB_toNB h r))
+       (sym Nat (wbval (lcons (fst h) r)) (wbvalL (rev (lcons (fst h) r))) (wbval_revL (lcons (fst h) r))))
+-- a normalised high-first chain is a numeral: its head is the top word, nonzero by isNormM
+def numOfNorm : (y : WB) -> Path Bool (isNormM y) true -> Num :=
+  elim List (\y -> Path Bool (isNormM y) true -> Num) (\_ -> zeroN) (\h r _ -> \hp -> posN (posOfWB (h, wlt_true 0 h hp) r))
+def numOfWB (z : WB) : Num := numOfNorm (wnorm z) (wnorm_normM z)
+def numOfNorm_val : (y : WB) (hp : Path Bool (isNormM y) true) -> Path Nat (valN (numOfNorm y hp)) (wbval y) :=
+  elim List (\y -> (hp : Path Bool (isNormM y) true) -> Path Nat (valN (numOfNorm y hp)) (wbval y))
+    (\_ -> prefl Nat 0)
+    (\h r _ -> \hp -> posOfWB_val (h, wlt_true 0 h hp) r)
+def numOfWB_val : (z : WB) -> Path Nat (valN (numOfWB z)) (wbval z) :=
+  \z -> compPath Nat (valN (numOfWB z)) (wbval (wnorm z)) (wbval z) (numOfNorm_val (wnorm z) (wnorm_normM z)) (wnorm_val z)
+def numOfNB (x : NB) : Num := numOfWB (rev x)
+def numOfNB_val : (x : NB) -> Path Nat (valN (numOfNB x)) (wbvalL x) :=
+  \x -> compPath Nat (valN (numOfNB x)) (wbval (rev x)) (wbvalL x) (numOfWB_val (rev x)) (sym Nat (wbvalL x) (wbval (rev x)) (wbvalL_rev x))
+
+-- ---- the interface: the successor, one word operation at the low end ----
+def wpone : WordPos := (1, refl)
+def wadd1_pos (w : Word) (hf : Path Bool (weq w wM63) false) : Lt 0 (wlimb (wadd w 1)) :=
+  substId (\v -> Lt 0 v) (pathToId (sym Nat (wlimb (wadd w 1)) (add (wlimb w) 1) (wadd1_val w hf))) (le_ble 1 (add (wlimb w) 1) (wlimb w, add_comm 1 (wlimb w)))
+def sucP : Pos -> Pos := elim Pos (\_ -> Pos)
+  (\w -> elim Bool (\c -> Path Bool (weq (fst w) wM63) c -> Pos)
+           (\_ -> consP 0 (topP wpone))
+           (\hf -> topP (wadd (fst w) 1, wadd1_pos (fst w) hf))
+           (weq (fst w) wM63) (prefl Bool (weq (fst w) wM63)))
+  (\l p ih -> elim Bool (\_ -> Pos) (consP 0 ih) (consP (wadd l 1) p) (weq l wM63))
+def sucN : Num -> Num := elim Num (\_ -> Num) (posN (topP wpone)) (\p -> posN (sucP p))
+def sucP_val : (p : Pos) -> Path Nat (valP (sucP p)) (suc (valP p)) :=
+  elim Pos (\p -> Path Nat (valP (sucP p)) (suc (valP p)))
+    (\w ->
+      let L : Nat := wplimb w in
+      elim Bool (\c -> (e : Path Bool (weq (fst w) wM63) c) ->
+                 Path Nat (valP (elim Bool (\c -> Path Bool (weq (fst w) wM63) c -> Pos) (\_ -> consP 0 (topP wpone)) (\hf -> topP (wadd (fst w) 1, wadd1_pos (fst w) hf)) c e)) (suc L))
+        (\e -> let hL : Path Nat L M63 := weq_true (fst w) wM63 e in
+               sym Nat (suc L) (add 0 (mul 1 M64)) (cong Nat Nat suc L M63 hL))
+        (\e -> compPath Nat (wlimb (wadd (fst w) 1)) (add L 1) (suc L) (wadd1_val (fst w) e) (add_one_r L))
+        (weq (fst w) wM63) (prefl Bool (weq (fst w) wM63)))
+    (\l p ih ->
+      let L : Nat := wlimb l in
+      let V : Nat := valP p in
+      elim Bool (\c -> Path Bool (weq l wM63) c -> Path Nat (valP (elim Bool (\_ -> Pos) (consP 0 (sucP p)) (consP (wadd l 1) p) c)) (suc (add L (mul V M64))))
+        (\ht ->
+          let hL : Path Nat L M63 := weq_true l wM63 ht in
+          compPath Nat (valP (consP 0 (sucP p))) (mul (suc V) M64) (suc (add L (mul V M64)))
+            (cong Nat Nat (\w -> add 0 (mul w M64)) (valP (sucP p)) (suc V) ih)
+            (cong Nat Nat (\w -> suc (add w (mul V M64))) M63 L (sym Nat L M63 hL)))
+        (\hf ->
+          let hw : Path Nat (wlimb (wadd l 1)) (add L 1) := wadd1_val l hf in
+          compPath Nat (valP (consP (wadd l 1) p)) (add (add L 1) (mul V M64)) (suc (add L (mul V M64)))
+            (cong Nat Nat (\w -> add w (mul V M64)) (wlimb (wadd l 1)) (add L 1) hw)
+            (cong Nat Nat (\w -> add w (mul V M64)) (add L 1) (suc L) (add_one_r L)))
+        (weq l wM63) (prefl Bool (weq l wM63)))
+def sucN_val : (x : Num) -> Path Nat (valN (sucN x)) (suc (valN x)) :=
+  elim Num (\x -> Path Nat (valN (sucN x)) (suc (valN x))) (prefl Nat 1) (\p -> sucP_val p)
+
+-- ---- the interface: the predecessor (borrowing, and peeling a top that would become zero) and the zero test ----
+def wpM63 : WordPos := (wM63, refl)
+-- a top word above one stays a top word after the borrow
+def wsub1_pos (w : WordPos) (hf : Path Bool (weq (fst w) 1) false) : Lt 0 (wlimb (wsub (fst w) 1)) :=
+  let L : Nat := wplimb w in
+  let h1 : Le 1 L := lt_le 0 L (snd w) in
+  let hne : Path Nat L 1 -> Empty := weq_false (fst w) 1 hf in
+  let h2 : Le 2 L := lt_le 1 L (le_neq_lt 1 L h1 (\e -> hne (sym Nat 1 L e))) in
+  let e : Nat := fst h2 in
+  let hL : Path Nat L (suc (suc e)) := sym Nat (suc (suc e)) L (snd h2) in
+  let hpos : Lt 0 (sub L 1) := substId (\v -> Lt 0 (sub v 1)) (pathToId (sym Nat L (suc (suc e)) hL)) (le_ble 1 (suc e) (e, prefl Nat (suc e))) in
+  substId (\v -> Lt 0 v) (pathToId (sym Nat (wlimb (wsub (fst w) 1)) (sub L 1) (wsub_ge (fst w) 1 h1))) hpos
+def predP : Pos -> Num := elim Pos (\_ -> Num)
+  (\w -> elim Bool (\c -> Path Bool (weq (fst w) 1) c -> Num)
+           (\_ -> zeroN)
+           (\hf -> posN (topP (wsub (fst w) 1, wsub1_pos w hf)))
+           (weq (fst w) 1) (prefl Bool (weq (fst w) 1)))
+  (\l p ih -> elim Bool (\_ -> Num)
+           (elim Num (\_ -> Num) (posN (topP wpM63)) (\q -> posN (consP wM63 q)) ih)
+           (posN (consP (wsub l 1) p))
+           (weq l 0))
+def predN : Num -> Num := elim Num (\_ -> Num) zeroN (\p -> predP p)
+def iszN : Num -> Bool := elim Num (\_ -> Bool) true (\_ -> false)
+def predP_val : (p : Pos) -> Path Nat (valN (predP p)) (pred (valP p)) :=
+  elim Pos (\p -> Path Nat (valN (predP p)) (pred (valP p)))
+    (\w ->
+      let L : Nat := wplimb w in
+      elim Bool (\c -> (e : Path Bool (weq (fst w) 1) c) ->
+                 Path Nat (valN (elim Bool (\c -> Path Bool (weq (fst w) 1) c -> Num) (\_ -> zeroN) (\hf -> posN (topP (wsub (fst w) 1, wsub1_pos w hf))) c e)) (pred L))
+        (\e -> let hL : Path Nat L 1 := weq_true (fst w) 1 e in
+               substId (\v -> Path Nat 0 (pred v)) (pathToId (sym Nat L 1 hL)) (prefl Nat 0))
+        (\e -> let h1 : Le 1 L := lt_le 0 L (snd w) in
+               let d : Nat := fst h1 in
+               let hL : Path Nat L (suc d) := sym Nat (suc d) L (snd h1) in
+               compPath Nat (wlimb (wsub (fst w) 1)) (sub L 1) (pred L)
+                 (wsub_ge (fst w) 1 h1)
+                 (substId (\v -> Path Nat (sub v 1) (pred v)) (pathToId (sym Nat L (suc d) hL)) (prefl Nat d)))
+        (weq (fst w) 1) (prefl Bool (weq (fst w) 1)))
+    (\l p ih ->
+      let L : Nat := wlimb l in
+      let V : Nat := valP p in
+      let G : Nat := pred (add L (mul V M64)) in
+      let hv : Le 1 V := valP_pos p in
+      let d : Nat := fst hv in
+      let hd : Path Nat V (suc d) := sym Nat (suc d) V (snd hv) in
+      elim Bool (\c -> Path Bool (weq l 0) c -> Path Nat (valN (elim Bool (\_ -> Num) (elim Num (\_ -> Num) (posN (topP wpM63)) (\q -> posN (consP wM63 q)) (predP p)) (posN (consP (wsub l 1) p)) c)) G)
+        (\ht ->
+          let hL : Path Nat L 0 := weq_true l 0 ht in
+          elim Num (\m -> Path Nat (valN m) (pred V) -> Path Nat (valN (elim Num (\_ -> Num) (posN (topP wpM63)) (\q -> posN (consP wM63 q)) m)) G)
+            (\hz ->
+              let hz' : Path Nat 0 d := substId (\v -> Path Nat 0 (pred v)) (pathToId hd) hz in
+              substId (\v -> Path Nat M63 (pred (add L (mul v M64)))) (pathToId (sym Nat V (suc d) hd))
+                (substId (\w -> Path Nat M63 (pred (add w (mul (suc d) M64)))) (pathToId (sym Nat L 0 hL))
+                   (substId (\u -> Path Nat M63 (pred (add 0 (mul (suc u) M64)))) (pathToId hz') (prefl Nat M63))))
+            (\q -> \hq ->
+              compPath Nat (add M63 (mul (valP q) M64)) (add M63 (mul (pred V) M64)) G
+                (cong Nat Nat (\w -> add M63 (mul w M64)) (valP q) (pred V) hq)
+                (substId (\v -> Path Nat (add M63 (mul (pred v) M64)) (pred (add L (mul v M64)))) (pathToId (sym Nat V (suc d) hd))
+                   (substId (\w -> Path Nat (add M63 (mul d M64)) (pred (add w (mul (suc d) M64)))) (pathToId (sym Nat L 0 hL))
+                      (prefl Nat (add M63 (mul d M64))))))
+            (predP p) ih)
+        (\hf ->
+          let hne : Path Nat L 0 -> Empty := weq_false l 0 hf in
+          let h1 : Le 1 L := lt_le 0 L (le_neq_lt 0 L (L, prefl Nat L) (\e -> hne (sym Nat 0 L e))) in
+          let e : Nat := fst h1 in
+          let hL : Path Nat L (suc e) := sym Nat (suc e) L (snd h1) in
+          compPath Nat (add (wlimb (wsub l 1)) (mul V M64)) (add (sub L 1) (mul V M64)) G
+            (cong Nat Nat (\w -> add w (mul V M64)) (wlimb (wsub l 1)) (sub L 1) (wsub_ge l 1 h1))
+            (substId (\w -> Path Nat (add (sub w 1) (mul V M64)) (pred (add w (mul V M64)))) (pathToId (sym Nat L (suc e) hL)) (prefl Nat (add e (mul V M64)))))
+        (weq l 0) (prefl Bool (weq l 0)))
+def predN_val : (x : Num) -> Path Nat (valN (predN x)) (pred (valN x)) :=
+  elim Num (\x -> Path Nat (valN (predN x)) (pred (valN x))) (prefl Nat 0) (\p -> predP_val p)
+def iszN_true : (x : Num) -> Path Bool (iszN x) true -> Path Nat (valN x) 0 :=
+  elim Num (\x -> Path Bool (iszN x) true -> Path Nat (valN x) 0) (\_ -> prefl Nat 0)
+    (\p -> \h -> elim Empty (\_ -> Path Nat (valP p) 0) (falseNotTrue h))
+def iszN_false : (x : Num) -> Path Bool (iszN x) false -> Le 1 (valN x) :=
+  elim Num (\x -> Path Bool (iszN x) false -> Le 1 (valN x))
+    (\h -> elim Empty (\_ -> Le 1 0) (trueNotFalse h))
+    (\p -> \_ -> valP_pos p)
+
+-- ---- the arithmetic: nb.tt's NB folds through the conversions, the laws carried over ----
+def viaN (f : NB -> NB -> NB) (g : Nat -> Nat -> Nat) (law : (a b : NB) -> Path Nat (wbvalL (f a b)) (g (wbvalL a) (wbvalL b))) (x y : Num)
+  : Path Nat (valN (numOfNB (f (numToNB x) (numToNB y)))) (g (valN x) (valN y)) :=
+  compPath Nat (valN (numOfNB (f (numToNB x) (numToNB y)))) (wbvalL (f (numToNB x) (numToNB y))) (g (valN x) (valN y))
+    (numOfNB_val (f (numToNB x) (numToNB y)))
+    (compPath Nat (wbvalL (f (numToNB x) (numToNB y))) (g (wbvalL (numToNB x)) (wbvalL (numToNB y))) (g (valN x) (valN y))
+       (law (numToNB x) (numToNB y))
+       (compPath Nat (g (wbvalL (numToNB x)) (wbvalL (numToNB y))) (g (valN x) (wbvalL (numToNB y))) (g (valN x) (valN y))
+          (cong Nat Nat (\w -> g w (wbvalL (numToNB y))) (wbvalL (numToNB x)) (valN x) (numToNB_val x))
+          (cong Nat Nat (\w -> g (valN x) w) (wbvalL (numToNB y)) (valN y) (numToNB_val y))))
+def viaNN (f : NB -> NB -> Nat) (g : Nat -> Nat -> Nat) (law : (a b : NB) -> Path Nat (f a b) (g (wbvalL a) (wbvalL b))) (x y : Num)
+  : Path Nat (f (numToNB x) (numToNB y)) (g (valN x) (valN y)) :=
+  compPath Nat (f (numToNB x) (numToNB y)) (g (wbvalL (numToNB x)) (wbvalL (numToNB y))) (g (valN x) (valN y))
+    (law (numToNB x) (numToNB y))
+    (compPath Nat (g (wbvalL (numToNB x)) (wbvalL (numToNB y))) (g (valN x) (wbvalL (numToNB y))) (g (valN x) (valN y))
+       (cong Nat Nat (\w -> g w (wbvalL (numToNB y))) (wbvalL (numToNB x)) (valN x) (numToNB_val x))
+       (cong Nat Nat (\w -> g (valN x) w) (wbvalL (numToNB y)) (valN y) (numToNB_val y)))
+def addN (x y : Num) : Num := numOfNB (naddN (numToNB x) (numToNB y))
+def subN (x y : Num) : Num := numOfNB (nsubN (numToNB x) (numToNB y))
+def mulN (x y : Num) : Num := numOfNB (nmulN (numToNB x) (numToNB y))
+def divN (x y : Num) : Num := numOfNB (ndivN (numToNB x) (numToNB y))
+def modN (x y : Num) : Num := numOfNB (nmodN (numToNB x) (numToNB y))
+def powN (x y : Num) : Num := numOfNB (npowN (numToNB x) (numToNB y))
+def minvN (x y : Num) : Num := numOfNB (nminvN (numToNB x) (numToNB y))
+def ltN (x y : Num) : Nat := nltN (numToNB x) (numToNB y)
+def leN (x y : Num) : Nat := nleN (numToNB x) (numToNB y)
+def eqN (x y : Num) : Nat := neqN (numToNB x) (numToNB y)
+def addN_val : (x y : Num) -> Path Nat (valN (addN x y)) (add (valN x) (valN y)) := viaN naddN add naddN_val
+def subN_val : (x y : Num) -> Path Nat (valN (subN x y)) (sub (valN x) (valN y)) := viaN nsubN sub nsubN_val
+def mulN_val : (x y : Num) -> Path Nat (valN (mulN x y)) (mul (valN x) (valN y)) := viaN nmulN mul nmulN_val
+def divN_val : (x y : Num) -> Path Nat (valN (divN x y)) (div (valN x) (valN y)) := viaN ndivN div ndivN_val
+def modN_val : (x y : Num) -> Path Nat (valN (modN x y)) (mod (valN x) (valN y)) := viaN nmodN mod nmodN_val
+def powN_val : (x y : Num) -> Path Nat (valN (powN x y)) (pow (valN x) (valN y)) := viaN npowN pow npowN_val
+def minvN_val : (x y : Num) -> Path Nat (valN (minvN x y)) (minv (valN x) (valN y)) := viaN nminvN minv nminvN_val
+def ltN_val : (x y : Num) -> Path Nat (ltN x y) (blt (valN x) (valN y)) := viaNN nltN blt nltN_val
+def leN_val : (x y : Num) -> Path Nat (leN x y) (ble (valN x) (valN y)) := viaNN nleN ble nleN_val
+def eqN_val : (x y : Num) -> Path Nat (eqN x y) (beq (valN x) (valN y)) := viaNN neqN beq neqN_val
+
+-- ---- the Word <-> Num boundary: a word is the one-word numeral, a numeral's low word is its lowest digit ----
+def singleN (w : Word) : Num := elim Bool (\c -> Path Bool (wlt 0 w) c -> Num) (\ht -> posN (topP (w, wlt_true 0 w ht))) (\_ -> zeroN) (wlt 0 w) (prefl Bool (wlt 0 w))
+def singleN_val : (w : Word) -> Path Nat (valN (singleN w)) (wlimb w) :=
+  \w -> elim Bool (\c -> (e : Path Bool (wlt 0 w) c) -> Path Nat (valN (elim Bool (\c -> Path Bool (wlt 0 w) c -> Num) (\ht -> posN (topP (w, wlt_true 0 w ht))) (\_ -> zeroN) c e)) (wlimb w))
+    (\_ -> prefl Nat (wlimb w))
+    (\hf -> sym Nat (wlimb w) 0 (le_antisym (wlimb w) 0 (wlt_false 0 w hf) (wlimb w, prefl Nat (wlimb w))))
+    (wlt 0 w) (prefl Bool (wlt 0 w))
+def lowP : Pos -> Word := elim Pos (\_ -> Word) (\w -> fst w) (\l _ _ -> l)
+def lowN : Num -> Word := elim Num (\_ -> Word) 0 (\p -> lowP p)
+def lowP_val : (p : Pos) -> Path Nat (wlimb (lowP p)) (mod (valP p) M64) :=
+  elim Pos (\p -> Path Nat (wlimb (lowP p)) (mod (valP p) M64))
+    (\w -> sym Nat (mod (wplimb w) M64) (wplimb w) (mod_small M63 (wplimb w) (snd (fst w))))
+    (\l p _ -> sym Nat (mod (add (wlimb l) (mul (valP p) M64)) M64) (wlimb l)
+       (compPath Nat (mod (add (wlimb l) (mul (valP p) M64)) M64) (mod (wlimb l) M64) (wlimb l)
+          (mod_add_mul (wlimb l) (valP p) M63) (mod_small M63 (wlimb l) (snd l))))
+def lowN_val : (x : Num) -> Path Nat (wlimb (lowN x)) (mod (valN x) M64) :=
+  elim Num (\x -> Path Nat (wlimb (lowN x)) (mod (valN x) M64)) (prefl Nat 0) (\p -> lowP_val p)
+
+-- ---- the equivalence: Nat and Num are the same type ----
+def ofNat : Nat -> Num := elim Nat (\_ -> Num) zeroN (\_ ih -> sucN ih)
+def ofNat_val : (n : Nat) -> Path Nat (valN (ofNat n)) n :=
+  elim Nat (\n -> Path Nat (valN (ofNat n)) n) (prefl Nat 0)
+    (\k ih -> compPath Nat (valN (sucN (ofNat k))) (suc (valN (ofNat k))) (suc k) (sucN_val (ofNat k)) (cong Nat Nat suc (valN (ofNat k)) k ih))
+def wplimb_path : (u v : WordPos) -> Path Nat (wplimb u) (wplimb v) -> Path WordPos u v := \u v p -> wppath {u} {v} (wpath {fst u} {fst v} p)
+-- a top word is below M64 and a numeral with a word under it is at least M64: the two shapes never share a value
+def top_below_cons : (w : WordPos) (m : Word) (q : Pos) -> Path Nat (wplimb w) (add (wlimb m) (mul (valP q) M64)) -> Empty :=
+  \w m q e ->
+  let L : Nat := wplimb w in
+  let R : Nat := add (wlimb m) (mul (valP q) M64) in
+  let hR : Le M64 R := le_trans M64 (mul (valP q) M64) R (le_mul_r 1 (valP q) M64 (valP_pos q)) (wlimb m, add_comm (mul (valP q) M64) (wlimb m)) in
+  lt_irrefl L (le_trans (suc L) M64 L (lt_le L M64 (snd (fst w))) (substId (\v -> Le M64 v) (pathToId (sym Nat L R e)) hR))
+-- the value is injective: same shape, the digits agree (the quotient and remainder by M64 are unique), by induction
+def valP_inj : (p q : Pos) -> Path Nat (valP p) (valP q) -> Path Pos p q :=
+  elim Pos (\p -> (q : Pos) -> Path Nat (valP p) (valP q) -> Path Pos p q)
+    (\w -> elim Pos (\q -> Path Nat (wplimb w) (valP q) -> Path Pos (topP w) q)
+             (\v -> \e -> cong WordPos Pos topP w v (wplimb_path w v e))
+             (\m q' _ -> \e -> elim Empty (\_ -> Path Pos (topP w) (consP m q')) (top_below_cons w m q' e)))
+    (\l p' ihp -> elim Pos (\q -> Path Nat (add (wlimb l) (mul (valP p') M64)) (valP q) -> Path Pos (consP l p') q)
+             (\v -> \e -> elim Empty (\_ -> Path Pos (consP l p') (topP v)) (top_below_cons v l p' (sym Nat (add (wlimb l) (mul (valP p') M64)) (wplimb v) e)))
+             (\m q' _ -> \e ->
+               let L : Nat := wlimb l in
+               let P : Nat := valP p' in
+               let Mm : Nat := wlimb m in
+               let Q : Nat := valP q' in
+               let e' : Path Nat (add (mul P M64) L) (add (mul Q M64) Mm) :=
+                 compPath Nat (add (mul P M64) L) (add L (mul P M64)) (add (mul Q M64) Mm) (add_comm (mul P M64) L)
+                   (compPath Nat (add L (mul P M64)) (add Mm (mul Q M64)) (add (mul Q M64) Mm) e (add_comm Mm (mul Q M64))) in
+               let u : Sigma (Path Nat P Q) (\_ -> Path Nat L Mm) := dm_eq M63 P Q L Mm e' (snd l) (snd m) in
+               \i -> consP (wpath {l} {m} (snd u) i) (ihp q' (fst u) i)))
+def valN_inj : (x y : Num) -> Path Nat (valN x) (valN y) -> Path Num x y :=
+  elim Num (\x -> (y : Num) -> Path Nat (valN x) (valN y) -> Path Num x y)
+    (elim Num (\y -> Path Nat 0 (valN y) -> Path Num zeroN y)
+       (\_ -> prefl Num zeroN)
+       (\q -> \e -> elim Empty (\_ -> Path Num zeroN (posN q))
+                 (znots (compPath Nat 0 (valP q) (suc (fst (valP_pos q))) e (sym Nat (suc (fst (valP_pos q))) (valP q) (snd (valP_pos q)))))))
+    (\p -> elim Num (\y -> Path Nat (valP p) (valN y) -> Path Num (posN p) y)
+       (\e -> elim Empty (\_ -> Path Num (posN p) zeroN) (snotz (compPath Nat (suc (fst (valP_pos p))) (valP p) 0 (snd (valP_pos p)) e)))
+       (\q -> \e -> cong Pos Num posN p q (valP_inj p q e)))
+def ofNat_valN : (x : Num) -> Path Num (ofNat (valN x)) x := \x -> valN_inj (ofNat (valN x)) x (ofNat_val (valN x))
+def numEquiv : Equiv Nat Num := isoToEquiv Nat Num ofNat valN ofNat_valN ofNat_val
+def numPath : Path U Nat Num := ua Nat Num numEquiv
