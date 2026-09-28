@@ -1,4 +1,4 @@
--- show.tt: a value's Lazy-K output, written in the type theory (M20, stage F2).
+-- stream.tt: a value's Lazy-K output, written in the type theory (M20, stage F2).
 --
 -- eezo's stream I/O (-i) drives a program as a function from the input stream to the output stream: a stream is a
 -- pair (byte, rest), a byte a Church numeral, and a head >= 256 ends the output (256 exits 0). Nothing here is a

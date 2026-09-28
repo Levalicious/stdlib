@@ -1,33 +1,42 @@
-# Eezo I/O - the Lazy-K / WHNF stream model
+# Eezo I/O - the monad
 #
-# A program is a function from the input stream to the output stream.
-# A stream is a pair  f -> f(x)(rest)  whose elements are Church-numeral
-# bytes. The input ends in an infinite stream of 256 (EOF); an output
-# element of 256 or more ends the program with exit status n - 256.
+# A program is a value of IO a: a function of two continuations. done takes the program's result when it is
+# finished; act takes a continuation k, an action g and the action's input x when the program needs the runtime:
+#     m(done)(act)
+# run applies a program to the driver's two continuations, which turn either case into a 4-tuple
+# f -> f(tag)(k)(g)(x): tag 0 (done; k is the result) or tag 1 (act). The driver (eezo -m, or an ELF built with
+# eezoc -e -m) reduces run(m) to weak head normal form, reads the tuple with selectors, performs the action on its
+# input and continues with k applied to the result - a loop, nothing more. Everything the driver reads is a Church
+# numeral: an action is a selector over the driver's handlers (g(0)(1)(2) says which: putc, getc, exit), bytes are
+# numerals, 256 the end of the input. The program fixes no order beyond the data flow: a runtime reducing lazily or
+# in parallel may perform an action while the continuation runs ahead, until it needs the result (alonzo's NewIO).
 #
-# The driver (eezo -i, or an ELF built with eezoc -e -i) forces the output
-# to weak head normal form one element at a time: nothing is ever
-# normalised beyond what the next byte needs, so infinite streams are fine
-# and the whole model - including I/O - is pure.
+# Streams - the Lazy-K model, a function from the input stream to the output stream - are stream.eezo.
 
 #import prelude
-#import pair
 #import nat
 
-# Streams
-cons(x)(rest) := pair(x)(rest)
-head(s) := fst(s)
-tail(s) := snd(s)
+# The monad
+pure(x) := done -> act -> done(x)
+bind(m)(f) := done -> act -> m(x -> f(x)(done)(act))(act)
+seq(m)(n) := bind(m)(x -> n)
 
-# End of stream: 256 followed by anything (the tail is never demanded)
-eof := 256
-stop := cons(eof)(zero)
+# An action g on an input x; its result is the program's
+perform(g)(x) := done -> act -> act(done)(g)(x)
 
-# End with an exit status
-exit(code) := cons(add(eof)(code))(zero)
+# The actions: selectors over the driver's handlers, in the driver's order
+putc := p -> g -> e -> p
+getc := p -> g -> e -> g
+exit := p -> g -> e -> e
 
-# Map over a stream (lazy: builds one cell per demanded element)
-smap(f)(s) := fix(go -> t -> cons(f(head(t)))(go(tail(t))))(s)
+# IO Unit
+putbyte(b) := perform(putc)(b)
+# IO Byte: 256 at the end of the input
+getbyte := perform(getc)(zero)
+# never returns; the exit status
+halt(code) := perform(exit)(code)
 
-# Copy input to output
-cat(s) := s
+# The driver's continuations: a 4-tuple either way, and the program as the driver runs it
+done(a) := f -> f(zero)(a)(a)(a)
+act(k)(g)(x) := f -> f(one)(k)(g)(x)
+run(m) := m(done)(act)

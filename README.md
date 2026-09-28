@@ -1,7 +1,8 @@
 # stdlib
 
 The Eezo standard library: the `.eezo` modules `#import` brings in (`prelude`, `bool`, `nat`, `list`, `maybe`, `either`,
-`pair`, `io`, ...) and, under `tt/`, the typed front end's (`prelude.tt`, `num.tt`, `show.tt`, `word.tt`, ...; `eezott -L tt`).
+`pair`, `io` - the IO monad, `stream` - the Lazy-K streams, ...) and, under `tt/`, the typed front end's (`prelude.tt`,
+`num.tt`, `stream.tt`, `word.tt`, ...; `eezott -L tt`).
 
 `mk install` puts both under `$PREFIX/share/eezo/stdlib` (PREFIX from the mkroot proto files, `$HOME/.local` by
 default), where [eezoc](https://github.com/Levalicious/eezoc) looks for imports (`EEZO_STDLIB` overrides).
