@@ -1,0 +1,28 @@
+name: ci
+on:
+  push:
+  pull_request:
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: stdlib            # this repository beside its dependencies: the workspace layout the mkfiles assume (../libeezo, ...)
+      - uses: Levalicious/mk@2e9df12fdc3a4d9a2793cb2d6d641817bd83cbbc
+      - uses: Levalicious/mkroot@38fc598680d6b47b13e4ac2b1f2d303023ba30d5
+      - name: dependencies at the commits deps.lock pins
+        run: sh stdlib/ci/deps.sh
+      - name: build, dependencies first
+        run: for d in libeezo eezo eezoc eezott; do (cd $d && mk) || exit 1; done
+      - run: (cd stdlib && mk install)
+      - name: every module imports into a program, every tt file type-checks
+        run: |
+          cd stdlib
+          for f in *.eezo; do printf '#import %s\nn := 5;\nn\n' "${f%.eezo}" | ../eezoc/eezoc -f xbcl > /dev/null || exit 1; done
+          ../eezott/eezott -c tt/prelude.tt || exit 1
+          ../eezott/eezott -c -L tt tt/num.tt || exit 1
+          for f in tt/*.tt; do
+            case $f in tt/prelude.tt|tt/num.tt) continue;; esac
+            ../eezott/eezott -c -L tt -p tt/prelude.tt -p tt/num.tt $f || exit 1
+          done
