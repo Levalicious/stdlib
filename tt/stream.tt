@@ -4,18 +4,15 @@
 -- pair (byte, rest), a byte a Church numeral, and a head >= 256 ends the output (256 exits 0). Nothing here is a
 -- primitive: a Church numeral is an element of (X : U) -> (X -> X) -> X -> X, which erases to the numeral itself; a
 -- cell is a Sigma, which erases to the pair k -> k a b; the terminator's tail is never forced, so it may be tt.
--- Byte is monomorphic on purpose: a type binder is kept at run time as an inert argument (the erasure passes types
--- as tc_u), and the driver applies a byte to K and S directly - the numeral must be bare, \f x -> f^n x.
--- The differential test (tests/fuzz.sh) appends `main := \_ -> showNat v` to a program and compares the bytes the
--- pristine eezoc artefact prints with the checker's normal form of v: the run-time leg observes the value through a
--- wrapper that is itself a typed program, never through an output primitive inside eezoc.
-def Byte : U := (Unit -> Unit) -> Unit -> Unit
-def byteOf : Nat -> Byte := \n f x -> elim Nat (\_ -> Unit) x (\_ ih -> f ih) n
+-- Bytes are byte.tt's bare Church numerals. The differential test (tests/fuzz.sh) appends `main := \_ -> showNat v`
+-- to a program and compares the bytes the pristine eezoc artefact prints with the checker's normal form of v: the
+-- run-time leg observes the value through a wrapper that is itself a typed program, never through an output
+-- primitive inside eezoc. The monad's wrapper is io.tt's putNat.
+#import byte
 -- Out k: k bytes then the terminator, as nested pairs (a fixed width keeps the type independent of the value)
 def Out : Nat -> U := \k -> elim Nat (\_ -> U) (Sigma Byte (\_ -> Unit)) (\_ ih -> Sigma Byte (\_ -> ih)) k
 def eofCell : Sigma Byte (\_ -> Unit) := (byteOf 256 , tt)
 -- the decimal digits of n, most significant first, zero-padded to k places (k = 64 holds every literal the tests use)
-def digitAt : Nat -> Nat -> Nat := \n p -> mod (div n (pow 10 p)) 10
 def showDigits : (k : Nat) -> Nat -> Out k := \k n -> elim Nat (\k -> Out k) eofCell (\p ih -> (byteOf (add 48 (digitAt n p)) , ih)) k
 def showNat : Nat -> Out 64 := showDigits 64
 -- a Bool as one byte, 't' or 'f'

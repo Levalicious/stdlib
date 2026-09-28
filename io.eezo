@@ -3,12 +3,12 @@
 # A program is a value of IO a: a function of two continuations. done takes the program's result when it is
 # finished; act takes a continuation k, an action g and the action's input x when the program needs the runtime:
 #     m(done)(act)
-# run applies a program to the driver's two continuations, which turn either case into a 4-tuple
-# f -> f(tag)(k)(g)(x): tag 0 (done; k is the result) or tag 1 (act). The driver (eezo -m, or an ELF built with
-# eezoc -e -m) reduces run(m) to weak head normal form, reads the tuple with selectors, performs the action on its
-# input and continues with k applied to the result - a loop, nothing more. Everything the driver reads is a Church
-# numeral: an action is a selector over the driver's handlers (g(0)(1)(2) says which: putc, getc, exit), bytes are
-# numerals, 256 the end of the input. The program fixes no order beyond the data flow: a runtime reducing lazily or
+# run applies a program to the driver's two continuations, which make either case a Scott-encoded step
+# e -> a -> e (done) or e -> a -> a(g)(k)(x) (act) - what the typed front end's `data Answer = done | act g k x`
+# erases to. The driver (eezo -m, or an ELF built with eezoc -e -m) reduces run(m) to weak head normal form, reads
+# the step with selectors (step(0)(g -> k -> x -> 1) is the tag; step(0)(g -> k -> x -> g) the action, and so on), performs the action on its input and continues with k applied to the result - a loop, nothing more.
+# Everything the driver reads is a Church numeral: an action is a selector over the driver's handlers
+# (g(0)(1)(2) says which: putc, getc, exit), bytes are numerals, 256 the end of the input. The program fixes no order beyond the data flow: a runtime reducing lazily or
 # in parallel may perform an action while the continuation runs ahead, until it needs the result (alonzo's NewIO).
 #
 # Streams - the Lazy-K model, a function from the input stream to the output stream - are stream.eezo.
@@ -22,7 +22,7 @@ bind(m)(f) := done -> act -> m(x -> f(x)(done)(act))(act)
 seq(m)(n) := bind(m)(x -> n)
 
 # An action g on an input x; its result is the program's
-perform(g)(x) := done -> act -> act(done)(g)(x)
+perform(g)(x) := done -> act -> act(g)(done)(x)
 
 # The actions: selectors over the driver's handlers, in the driver's order
 putc := p -> g -> e -> p
@@ -36,7 +36,7 @@ getbyte := perform(getc)(zero)
 # never returns; the exit status
 halt(code) := perform(exit)(code)
 
-# The driver's continuations: a 4-tuple either way, and the program as the driver runs it
-done(a) := f -> f(zero)(a)(a)(a)
-act(k)(g)(x) := f -> f(one)(k)(g)(x)
+# The driver's continuations - a Scott-encoded step, its result dropped - and the program as the driver runs it
+done(x) := e -> a -> e
+act(g)(k)(x) := e -> a -> a(g)(k)(x)
 run(m) := m(done)(act)

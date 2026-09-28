@@ -1,0 +1,47 @@
+-- io.tt: the IO monad in the type theory - alonzo's NewIO, the stdlib's io.eezo typed (2026-09-28).
+--
+-- IO a is the Church encoding of a free monad over the actions: a program takes a continuation for its result and
+-- one for an action - the action g, a continuation k for its result, and its input x - and calls either. The
+-- actions are an enumeration whose input and output types are computed by elimination (In, Out), so that perform
+-- putc b : IO Unit by reduction; the constructors erase to the selectors the driver expects (g 0 1 2 says which).
+-- run applies a program to the step constructors: Answer erases to the Scott-encoded step e -> a -> e (done) or
+-- e -> a -> a g k x (act) that eezo -m and eezoc -e -m read, so a typed program is run exactly as an untyped one -
+-- types vanish, and the protocol is one. (Nothing in the step carries a type: the erasure keeps type binders as
+-- inert arguments, so an action family indexed by its types would put them in the step.) The program fixes no
+-- order beyond the data flow: a runtime reducing lazily or in parallel may perform an action while the
+-- continuation runs ahead, until it needs the result.
+#import prelude
+#import num
+#import byte
+
+data Act : U where
+  | putc : Act
+  | getc : Act
+  | exit : Act
+-- the input and the output type of each action
+def In : Act -> U := \g -> elim Act (\_ -> U) Byte Unit Byte g
+def Out : Act -> U := \g -> elim Act (\_ -> U) Unit Byte Empty g
+
+def IO : U -> U 1 := \a -> (r : U) -> (a -> r) -> ((g : Act) -> (Out g -> r) -> In g -> r) -> r
+def pure {a : U} (x : a) : IO a := \r k h -> k x
+def bind {a b : U} (m : IO a) (f : a -> IO b) : IO b := \r k h -> m r (\x -> f x r k h) h
+def seq {a b : U} (m : IO a) (n : IO b) : IO b := bind m (\_ -> n)
+-- an action on an input: its result is the program's
+def perform (g : Act) (x : In g) : IO (Out g) := \r k h -> h g k x
+def putbyte (b : Byte) : IO Unit := perform putc b
+-- 256 at the end of the input
+def getbyte : IO Byte := perform getc tt
+-- never returns: the exit status
+def halt (b : Byte) : IO Empty := perform exit b
+
+-- what the driver runs: a step, done or an action with its continuation; the program's result is not observed
+data Answer : U where
+  | done : Answer
+  | act : (g : Act) -> (Out g -> Answer) -> In g -> Answer
+def run {a : U} (m : IO a) : Answer := m Answer (\_ -> done) act
+
+-- the decimal digits of n, most significant first, zero-padded to 64 places (what the differential test compares)
+def putDigits : Nat -> Nat -> IO Unit := \k n -> elim Nat (\_ -> IO Unit) (pure tt) (\p ih -> seq (putbyte (byteOf (add 48 (digitAt n p)))) ih) k
+def putNat : Nat -> IO Unit := putDigits 64
+-- a Bool as one byte, 't' or 'f'
+def putBool : Bool -> IO Unit := \b -> putbyte (byteOf (elim Bool (\_ -> Nat) 116 102 b))

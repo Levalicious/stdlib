@@ -1,0 +1,8 @@
+-- byte.tt: bytes as bare Church numerals, the currency of both I/O models (stream.tt, io.tt).
+-- A byte is an element of (Unit -> Unit) -> Unit -> Unit, which erases to the numeral itself, \f x -> f^n x: the
+-- drivers read it by applying it to K and S, so it must be bare - no type binder kept at run time (a polymorphic
+-- Church numeral would carry its type as an inert argument, since the erasure passes types as tc_u).
+def Byte : U := (Unit -> Unit) -> Unit -> Unit
+def byteOf : Nat -> Byte := \n f x -> elim Nat (\_ -> Unit) x (\_ ih -> f ih) n
+-- the decimal digit of n at place p (10^p)
+def digitAt : Nat -> Nat -> Nat := \n p -> mod (div n (pow 10 p)) 10
