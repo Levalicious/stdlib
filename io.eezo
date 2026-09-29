@@ -15,6 +15,8 @@
 
 #import prelude
 #import nat
+#import bool
+#import list
 
 # The monad
 pure(x) := done -> act -> done(x)
@@ -40,3 +42,11 @@ halt(code) := perform(exit)(code)
 done(x) := e -> a -> e
 act(g)(k)(x) := e -> a -> a(g)(k)(x)
 run(m) := m(done)(act)
+
+# Lines, over bytes (lists of list.eezo). The end of a line is a newline (10) or the end of the input (256); getline
+# drops the newline.
+eqbyte(a)(b) := and(isZero(sub(a)(b)))(isZero(sub(b)(a)))
+eol(b) := or(eqbyte(b)(10))(isZero(sub(256)(b)))
+putstr(l) := l(pure(zero))(x -> rest -> seq(putbyte(x))(rest))
+putline(l) := seq(putstr(l))(putbyte(10))
+getline := fix(loop -> bind(getbyte)(b -> eol(b)(pure(nil))(bind(loop)(rest -> pure(cons(b)(rest))))))

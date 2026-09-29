@@ -45,3 +45,12 @@ def putDigits : Nat -> Nat -> IO Unit := \k n -> elim Nat (\_ -> IO Unit) (pure 
 def putNat : Nat -> IO Unit := putDigits 64
 -- a Bool as one byte, 't' or 'f'
 def putBool : Bool -> IO Unit := \b -> putbyte (byteOf (elim Bool (\_ -> Nat) 116 102 b))
+
+-- Lines, over bytes. The end of a line is a newline (10) or the end of the input (256); getline drops the newline and
+-- reads at most n bytes (a total theory has no unbounded loop: the bound is the fuel, and a line longer than it is
+-- returned in pieces).
+def putstr : List Byte -> IO Unit := elim List (\_ -> IO Unit) (pure tt) (\b _ ih -> seq (putbyte b) ih)
+def putline : List Byte -> IO Unit := \l -> seq (putstr l) (putbyte (byteOf 10))
+def eol : Byte -> Nat := \b -> elim Nat (\_ -> Nat) (ble 256 (toNat b)) (\_ _ -> 1) (beq (toNat b) 10)
+def getline : Nat -> IO (List Byte) := \n -> elim Nat (\_ -> IO (List Byte)) (pure (lnil {Byte}))
+  (\_ ih -> bind getbyte (\b -> elim Nat (\_ -> IO (List Byte)) (bind ih (\rest -> pure (lcons b rest))) (\_ _ -> pure (lnil {Byte})) (eol b))) n
