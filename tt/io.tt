@@ -51,6 +51,6 @@ def putBool : Bool -> IO Unit := \b -> putbyte (byteOf (elim Bool (\_ -> Nat) 11
 -- returned in pieces).
 def putstr : List Byte -> IO Unit := elim List (\_ -> IO Unit) (pure tt) (\b _ ih -> seq (putbyte b) ih)
 def putline : List Byte -> IO Unit := \l -> seq (putstr l) (putbyte (byteOf 10))
-def eol : Byte -> Nat := \b -> elim Nat (\_ -> Nat) (ble 256 (toNat b)) (\_ _ -> 1) (beq (toNat b) 10)
+def eol : Byte -> Nat := \b -> elim Nat (\_ -> Nat) (ble 256 (byteToNat b)) (\_ _ -> 1) (beq (byteToNat b) 10)
 def getline : Nat -> IO (List Byte) := \n -> elim Nat (\_ -> IO (List Byte)) (pure (lnil {Byte}))
   (\_ ih -> bind getbyte (\b -> elim Nat (\_ -> IO (List Byte)) (bind ih (\rest -> pure (lcons b rest))) (\_ _ -> pure (lnil {Byte})) (eol b))) n
